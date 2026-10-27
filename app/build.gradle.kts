@@ -14,6 +14,12 @@ android {
         // Cada compilação no GitHub ganha um número maior, para a TV aceitar a atualização.
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
         versionName = "1.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
+        // Chave do TMDB vem do segredo TMDB_KEY do GitHub (fica fora do código público).
+        buildConfigField("String", "TMDB_KEY", "\"${System.getenv("TMDB_KEY") ?: ""}\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     signingConfigs {

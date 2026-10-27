@@ -1,16 +1,16 @@
 package com.geanalves.tvhome
 
+import android.animation.ValueAnimator
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.Drawable
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
-import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -21,52 +21,46 @@ import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/** Tela inicial: "Para você" com filmes/séries em destaque e a barra de apps embaixo. */
 class MainActivity : Activity() {
 
-    private data class Tile(
-        val key: String,
-        val title: String,
-        val banner: Drawable?,
-        val icon: Drawable?,
-        val onClick: () -> Unit,
-        val onMenu: (() -> Unit)? = null,
-    )
+    private data class Card(val title: String, val item: Tmdb.Item?, val app: AppEntry?)
 
     private lateinit var prefs: Prefs
-    private lateinit var backdrop: ImageView
-    private lateinit var heroTitle: TextView
-    private lateinit var heroHint: TextView
+    private lateinit var bgImage: ImageView
+    private lateinit var cardsScroll: HorizontalScrollView
+    private lateinit var cardsRow: LinearLayout
+    private lateinit var statusText: TextView
+    private lateinit var dockRow: LinearLayout
     private lateinit var clock: TextView
-    private lateinit var dateView: TextView
-    private lateinit var scroll: ScrollView
-    private lateinit var rows: LinearLayout
+    private val tabs = ArrayList<TextView>()
 
     private val handler = Handler(Looper.getMainLooper())
-    private var lastFocusKey: String? = null
-    private var firstTile: View? = null
-    private val topRowKeys = HashSet<String>()
+    private var currentTab = -1
+    private var selected: View? = null
+    private var showingFallback = false
+    private var loadToken = 0
+    private var firstLoad = true
+
+    private var cardH = 0
+    private var wideW = 0
+    private var narrowW = 0
 
     private val ptBr = Locale("pt", "BR")
     private val timeFmt = SimpleDateFormat("HH:mm", ptBr)
-    private val dateFmt = SimpleDateFormat("EEEE, d 'de' MMMM", ptBr)
-
-    private val palette = intArrayOf(
-        0xFF2B3A67.toInt(), 0xFF3D2C5E.toInt(), 0xFF1F4E5F.toInt(),
-        0xFF5A2F3F.toInt(), 0xFF2F4F3A.toInt(), 0xFF4A3B24.toInt(),
-    )
 
     private val tick = object : Runnable {
         override fun run() {
-            updateClock()
+            clock.text = timeFmt.format(Date())
             handler.postDelayed(this, 10_000)
         }
     }
@@ -74,7 +68,8 @@ class MainActivity : Activity() {
     private val packageReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, i: Intent?) {
             AppRepo.clearCache()
-            rebuild()
+            buildDock()
+            if (showingFallback) loadCards(force = true)
         }
     }
 
@@ -83,6 +78,10 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
+        val dm = resources.displayMetrics
+        cardH = (dm.heightPixels * 0.36f).toInt()
+        wideW = cardH * 16 / 9
+        narrowW = (cardH * 0.78f).toInt()
         setContentView(buildShell())
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
@@ -91,11 +90,13 @@ class MainActivity : Activity() {
             addDataScheme("package")
         }
         registerReceiver(packageReceiver, filter)
+        buildDock()
+        selectTab(0)
     }
 
     override fun onResume() {
         super.onResume()
-        rebuild()
+        buildDock()
         handler.removeCallbacks(tick)
         handler.post(tick)
     }
@@ -113,233 +114,493 @@ class MainActivity : Activity() {
         super.onDestroy()
     }
 
-    /** Apertou Home já estando na tela inicial: volta para o topo. */
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        lastFocusKey = null
-        scroll.smoothScrollTo(0, 0)
-        firstTile?.requestFocus()
+        goHome()
     }
 
     @Deprecated("Tela inicial não fecha com o botão Voltar")
     override fun onBackPressed() {
-        scroll.smoothScrollTo(0, 0)
-        firstTile?.requestFocus()
+        goHome()
     }
 
-    // ---------- montagem da tela ----------
+    private fun goHome() {
+        cardsScroll.smoothScrollTo(0, 0)
+        (cardsRow.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.requestFocus()
+    }
+
+    // ---------- montagem ----------
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
     private fun dpf(v: Int): Float = v * resources.displayMetrics.density
 
-    private fun buildShell(): View {
-        val root = FrameLayout(this)
-        root.background = GradientDrawable(
-            GradientDrawable.Orientation.TL_BR,
-            intArrayOf(0xFF161C2C.toInt(), 0xFF05060A.toInt()),
-        )
-
-        backdrop = ImageView(this).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            alpha = 0.35f
+    private fun rounded(color: Int, radius: Int): GradientDrawable =
+        GradientDrawable().apply {
+            cornerRadius = dpf(radius)
+            setColor(color)
         }
-        root.addView(backdrop, FrameLayout.LayoutParams(MATCH, MATCH))
 
-        val scrim = View(this).apply {
+    private fun ring(radius: Int): GradientDrawable =
+        GradientDrawable().apply {
+            cornerRadius = dpf(radius)
+            setColor(Color.TRANSPARENT)
+            setStroke(dp(3), Color.WHITE)
+        }
+
+    private fun buildShell(): View {
+        val root = FrameLayout(this).apply {
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0x22000000, 0xB3000000.toInt(), 0xF5000000.toInt()),
+                intArrayOf(0xFFF6F3EF.toInt(), 0xFFE7E2DC.toInt()),
             )
         }
-        root.addView(scrim, FrameLayout.LayoutParams(MATCH, MATCH))
-
-        scroll = ScrollView(this).apply {
-            isVerticalScrollBarEnabled = false
-            isFillViewport = true
-            clipChildren = false
-            clipToPadding = false
-            isSmoothScrollingEnabled = true
+        bgImage = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            alpha = 0f
         }
-        val body = LinearLayout(this).apply {
+        root.addView(bgImage, FrameLayout.LayoutParams(MATCH, MATCH))
+        root.addView(
+            View(this).apply {
+                background = GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    intArrayOf(0xB3F7F4F0.toInt(), 0x66F7F4F0, 0xD9F2EEEA.toInt()),
+                )
+            },
+            FrameLayout.LayoutParams(MATCH, MATCH),
+        )
+
+        val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(56), dp(36), dp(56), dp(64))
+            setPadding(dp(56), dp(32), dp(56), dp(26))
             clipChildren = false
             clipToPadding = false
         }
-        scroll.addView(body, FrameLayout.LayoutParams(MATCH, WRAP))
-        root.addView(scroll, FrameLayout.LayoutParams(MATCH, MATCH))
+        root.addView(content, FrameLayout.LayoutParams(MATCH, MATCH))
 
-        // Cabeçalho: nome do app em foco + relógio
-        val header = LinearLayout(this).apply {
+        // --- topo: título + abas | relógio + botões
+        val top = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.TOP
         }
-        val heroCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        heroTitle = TextView(this).apply {
-            textSize = 40f
-            setTextColor(Color.WHITE)
-            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            maxLines = 1
-            ellipsize = TextUtils.TruncateAt.END
+        val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        left.addView(
+            TextView(this).apply {
+                text = "Para você"
+                textSize = 36f
+                setTextColor(INK)
+                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            },
+        )
+        val tabRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(6), 0, 0)
         }
-        heroHint = TextView(this).apply {
-            textSize = 15f
-            setTextColor(0x99FFFFFF.toInt())
-            text = "Segure OK (ou aperte Menu) num app para mais opções"
+        listOf("Explorar", "Filmes", "Séries").forEachIndexed { i, s ->
+            val t = makeTab(s, i)
+            tabs += t
+            val lp = LinearLayout.LayoutParams(WRAP, WRAP)
+            lp.rightMargin = dp(6)
+            tabRow.addView(t, lp)
         }
-        heroCol.addView(heroTitle)
-        heroCol.addView(heroHint)
-        header.addView(heroCol, LinearLayout.LayoutParams(0, WRAP, 1f))
+        left.addView(tabRow)
+        top.addView(left, LinearLayout.LayoutParams(0, WRAP, 1f))
 
-        val clockCol = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.END
-        }
         clock = TextView(this).apply {
-            textSize = 34f
-            setTextColor(Color.WHITE)
+            textSize = 22f
+            setTextColor(INK)
             typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
-            gravity = Gravity.END
         }
-        dateView = TextView(this).apply {
+        val clp = LinearLayout.LayoutParams(WRAP, dp(48))
+        clp.rightMargin = dp(18)
+        clock.gravity = Gravity.CENTER_VERTICAL
+        top.addView(clock, clp)
+        top.addView(iconButton(R.drawable.ic_search) { openSearch() })
+        top.addView(iconButton(R.drawable.ic_apps) { startActivity(Intent(this, AppsActivity::class.java)) })
+        top.addView(iconButton(R.drawable.ic_tune) { open(Intent(Settings.ACTION_SETTINGS)) })
+        content.addView(top, LinearLayout.LayoutParams(MATCH, WRAP))
+
+        // --- carrossel
+        val cardsArea = FrameLayout(this).apply {
+            clipChildren = false
+            clipToPadding = false
+        }
+        cardsScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            isSmoothScrollingEnabled = true
+            clipChildren = false
+            clipToPadding = false
+        }
+        cardsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            clipChildren = false
+            clipToPadding = false
+            setPadding(0, dp(26), resources.displayMetrics.widthPixels, dp(8))
+        }
+        cardsScroll.addView(cardsRow, FrameLayout.LayoutParams(WRAP, MATCH))
+        cardsArea.addView(cardsScroll, FrameLayout.LayoutParams(MATCH, MATCH))
+        statusText = TextView(this).apply {
             textSize = 15f
-            setTextColor(0xB3FFFFFF.toInt())
-            gravity = Gravity.END
+            setTextColor(GRAY)
+            gravity = Gravity.CENTER
+            visibility = View.GONE
         }
-        clockCol.addView(clock)
-        clockCol.addView(dateView)
-        header.addView(clockCol, LinearLayout.LayoutParams(WRAP, WRAP))
-        body.addView(header, LinearLayout.LayoutParams(MATCH, WRAP))
+        cardsArea.addView(
+            statusText,
+            FrameLayout.LayoutParams(MATCH, WRAP, Gravity.BOTTOM),
+        )
+        content.addView(cardsArea, LinearLayout.LayoutParams(MATCH, 0, 1f))
 
-        // Espaço para o "palco" do app em foco, como na Apple TV
-        body.addView(View(this), LinearLayout.LayoutParams(MATCH, dp(140)))
+        // --- barra de apps
+        val dock = FrameLayout(this).apply {
+            background = rounded(0xBFFFFFFF.toInt(), 30)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            clipChildren = false
+            clipToPadding = false
+        }
+        val dockScroll = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            clipChildren = false
+            clipToPadding = false
+        }
+        dockRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            clipChildren = false
+            clipToPadding = false
+            setPadding(dp(8), dp(6), dp(8), dp(6))
+        }
+        dockScroll.addView(dockRow, FrameLayout.LayoutParams(WRAP, WRAP))
+        dock.addView(dockScroll, FrameLayout.LayoutParams(MATCH, WRAP))
+        content.addView(dock, LinearLayout.LayoutParams(MATCH, WRAP))
+        return root
+    }
 
-        rows = LinearLayout(this).apply {
+    private fun makeTab(label: String, index: Int): TextView =
+        TextView(this).apply {
+            text = label
+            textSize = 17f
+            setPadding(dp(14), dp(6), dp(14), dp(6))
+            isFocusable = true
+            isClickable = true
+            background = rounded(Color.TRANSPARENT, 20)
+            setOnFocusChangeListener { _, has ->
+                if (has) selectTab(index)
+                styleTabs()
+            }
+            setOnClickListener { selectTab(index) }
+        }
+
+    private fun styleTabs() {
+        tabs.forEachIndexed { i, t ->
+            val bg = t.background as GradientDrawable
+            when {
+                t.isFocused -> {
+                    bg.setColor(INK)
+                    t.setTextColor(Color.WHITE)
+                }
+                i == currentTab -> {
+                    bg.setColor(0x1A000000)
+                    t.setTextColor(INK)
+                }
+                else -> {
+                    bg.setColor(Color.TRANSPARENT)
+                    t.setTextColor(GRAY)
+                }
+            }
+            t.typeface = if (i == currentTab) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        }
+    }
+
+    private fun iconButton(res: Int, onClick: () -> Unit): View {
+        val bg = rounded(0xCCFFFFFF.toInt(), 24)
+        val icon = ImageView(this).apply {
+            setImageResource(res)
+            setColorFilter(INK)
+        }
+        val b = FrameLayout(this).apply {
+            background = bg
+            isFocusable = true
+            isClickable = true
+            setOnClickListener { onClick() }
+            setOnFocusChangeListener { v, has ->
+                bg.setColor(if (has) INK else 0xCCFFFFFF.toInt())
+                icon.setColorFilter(if (has) Color.WHITE else INK)
+                v.animate().scaleX(if (has) 1.12f else 1f).scaleY(if (has) 1.12f else 1f).setDuration(120).start()
+            }
+        }
+        b.addView(icon, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER))
+        val lp = LinearLayout.LayoutParams(dp(48), dp(48))
+        lp.leftMargin = dp(12)
+        b.layoutParams = lp
+        return b
+    }
+
+    // ---------- carrossel ----------
+
+    private fun selectTab(i: Int) {
+        if (i == currentTab) return
+        currentTab = i
+        styleTabs()
+        loadCards()
+    }
+
+    private fun loadCards(force: Boolean = false) {
+        val token = ++loadToken
+        if (!Tmdb.enabled) {
+            showCards(fallbackCards(), null)
+            return
+        }
+        if (!force) status("Carregando…")
+        Tmdb.list(currentTab) { items ->
+            if (token != loadToken) return@list
+            if (items.isEmpty()) {
+                showCards(fallbackCards(), "Sem conexão com o TMDB agora · mostrando seus apps")
+            } else {
+                showCards(items.map { Card(it.title, it, null) }, null)
+            }
+        }
+    }
+
+    private fun fallbackCards(): List<Card> {
+        val apps = AppRepo.load(this)
+        prefs.ensureDefaults(apps)
+        val byPkg = apps.associateBy { it.pkg }
+        val hidden = prefs.hidden
+        return prefs.favs.mapNotNull { byPkg[it] }
+            .filter { it.pkg !in hidden }
+            .map { Card(it.label, null, it) }
+    }
+
+    private fun status(msg: String?) {
+        statusText.text = msg ?: ""
+        statusText.visibility = if (msg == null) View.GONE else View.VISIBLE
+    }
+
+    private fun showCards(cards: List<Card>, note: String?) {
+        showingFallback = cards.any { it.app != null }
+        status(note)
+        val focusWasHere = cardsRow.hasFocus()
+        cardsRow.removeAllViews()
+        selected = null
+        cardsScroll.scrollTo(0, 0)
+        cards.forEach { c ->
+            val v = makeCard(c)
+            val lp = LinearLayout.LayoutParams(narrowW, WRAP)
+            lp.rightMargin = dp(26)
+            cardsRow.addView(v, lp)
+        }
+        val first = cardsRow.getChildAt(0) ?: return
+        select(first, animate = false)
+        if (firstLoad || focusWasHere || currentFocus == null) {
+            firstLoad = false
+            first.post { (first as ViewGroup).getChildAt(0).requestFocus() }
+        }
+    }
+
+    private fun makeCard(c: Card): View {
+        val item = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             clipChildren = false
             clipToPadding = false
         }
-        body.addView(rows, LinearLayout.LayoutParams(MATCH, WRAP))
-        return root
-    }
-
-    private fun rebuild() {
-        val apps = AppRepo.load(this)
-        prefs.ensureDefaults(apps)
-        val hidden = prefs.hidden
-        val byPkg = apps.associateBy { it.pkg }
-        val favs = prefs.favs.mapNotNull { byPkg[it] }.filter { it.pkg !in hidden }
-        val favSet = favs.map { it.pkg }.toSet()
-        val others = apps.filter { it.pkg !in hidden && it.pkg !in favSet }
-        val hiddenApps = apps.filter { it.pkg in hidden }
-
-        rows.removeAllViews()
-        firstTile = null
-        topRowKeys.clear()
-        var isTop = true
-
-        if (favs.isNotEmpty()) {
-            rows.addView(sectionLabel("Favoritos", first = true))
-            addGrid(favs.map { appTile(it) }, isTop)
-            isTop = false
-        }
-        if (others.isNotEmpty()) {
-            rows.addView(sectionLabel("Todos os apps", first = isTop))
-            addGrid(others.map { appTile(it) }, isTop)
-            isTop = false
-        }
-
-        val system = mutableListOf(
-            Tile(
-                key = "#settings",
-                title = "Configurações",
-                banner = null,
-                icon = getDrawable(android.R.drawable.ic_menu_preferences),
-                onClick = { open(Intent(Settings.ACTION_SETTINGS)) },
-            ),
-        )
-        if (hiddenApps.isNotEmpty()) {
-            system += Tile(
-                key = "#hidden",
-                title = "Apps ocultos (${hiddenApps.size})",
-                banner = null,
-                icon = getDrawable(android.R.drawable.ic_menu_view),
-                onClick = { showHiddenMenu(hiddenApps) },
-            )
-        }
-        rows.addView(sectionLabel("Sistema", first = isTop))
-        addGrid(system, isTop)
-
-        rows.post {
-            val target = lastFocusKey?.let { rows.findViewWithTag<View>(it) } ?: firstTile
-            target?.requestFocus()
-        }
-    }
-
-    private fun appTile(e: AppEntry): Tile {
-        val banner = AppRepo.banner(this, e)
-        return Tile(
-            key = e.pkg,
-            title = e.label,
-            banner = banner,
-            icon = if (banner == null) AppRepo.icon(this, e) else null,
-            onClick = { open(e.intent) },
-            onMenu = { showAppMenu(e) },
-        )
-    }
-
-    private fun sectionLabel(text: String, first: Boolean): TextView =
-        TextView(this).apply {
-            this.text = text.uppercase(ptBr)
-            textSize = 14f
-            letterSpacing = 0.12f
-            setTextColor(0x99FFFFFF.toInt())
-            setPadding(0, if (first) 0 else dp(36), 0, dp(4))
-        }
-
-    private fun addGrid(items: List<Tile>, isTopSection: Boolean) {
-        val gap = dp(24)
-        val usable = resources.displayMetrics.widthPixels - dp(112)
-        val tileW = (usable - gap * (COLS - 1)) / COLS
-        val tileH = tileW * 9 / 16
-
-        items.chunked(COLS).forEachIndexed { rowIndex, chunk ->
-            val row = LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                clipChildren = false
-                clipToPadding = false
-            }
-            chunk.forEachIndexed { i, t ->
-                if (isTopSection && rowIndex == 0) topRowKeys += t.key
-                val v = makeTile(t)
-                if (firstTile == null) firstTile = v
-                val lp = LinearLayout.LayoutParams(tileW, tileH)
-                if (i > 0) lp.leftMargin = gap
-                row.addView(v, lp)
-            }
-            val rlp = LinearLayout.LayoutParams(WRAP, WRAP)
-            rlp.topMargin = gap
-            rows.addView(row, rlp)
-        }
-    }
-
-    private fun makeTile(t: Tile): View {
-        val bg = GradientDrawable().apply {
-            cornerRadius = dpf(14)
-            setColor(if (t.banner != null) 0xFF232A3A.toInt() else palette[Math.floorMod(t.key.hashCode(), palette.size)])
-        }
-        val card = FrameLayout(this).apply {
-            background = bg
+        val frame = FrameLayout(this).apply {
+            background = rounded(0xFFD9D3CC.toInt(), 18)
             clipToOutline = true
             isFocusable = true
             isClickable = true
-            tag = t.key
+        }
+        val img = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+        frame.addView(img, FrameLayout.LayoutParams(MATCH, MATCH))
+
+        val title = TextView(this).apply {
+            text = c.title
+            textSize = 17f
+            setTextColor(INK)
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            setPadding(dp(2), dp(12), dp(2), 0)
+        }
+        val meta = TextView(this).apply {
+            textSize = 13f
+            setTextColor(GRAY)
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            setPadding(dp(2), dp(2), dp(2), 0)
+            visibility = View.INVISIBLE
+        }
+        item.addView(frame, LinearLayout.LayoutParams(MATCH, cardH))
+        item.addView(title, LinearLayout.LayoutParams(MATCH, WRAP))
+        item.addView(meta, LinearLayout.LayoutParams(MATCH, WRAP))
+
+        val tmdb = c.item
+        val app = c.app
+        if (tmdb != null) {
+            Tmdb.image(tmdb.backdrop, "w780") { b ->
+                if (b != null) {
+                    img.setImageBitmap(b)
+                    if (selected === item) setBackdrop(b)
+                }
+            }
+        } else if (app != null) {
+            val banner = AppRepo.banner(this, app)
+            if (banner != null) {
+                frame.background = rounded(0xFF1C1C1E.toInt(), 18)
+                img.scaleType = ImageView.ScaleType.FIT_CENTER
+                img.setImageDrawable(banner)
+            } else {
+                img.scaleType = ImageView.ScaleType.CENTER_INSIDE
+                img.setImageDrawable(AppRepo.icon(this, app))
+            }
         }
 
-        if (t.banner != null) {
+        val focusRing = ring(18)
+        frame.setOnFocusChangeListener { v, has ->
+            v.foreground = if (has) focusRing else null
+            v.animate()
+                .scaleX(if (has) 1.03f else 1f)
+                .scaleY(if (has) 1.03f else 1f)
+                .translationZ(if (has) dpf(20) else 0f)
+                .setDuration(180)
+                .start()
+            if (has) {
+                select(item, animate = true)
+                onCardSelected(c, img, meta)
+            }
+        }
+        frame.setOnClickListener { openCard(c) }
+        if (app != null) {
+            frame.setOnLongClickListener {
+                AppMenu.show(this, prefs, app) { refreshApps() }
+                true
+            }
+        }
+        return item
+    }
+
+    /** O card selecionado fica largo (como um destaque); os outros ficam estreitos. */
+    private fun select(item: View, animate: Boolean) {
+        if (selected === item) return
+        val old = selected
+        selected = item
+        if (old != null) {
+            resize(old, narrowW, animate, null)
+            ((old as ViewGroup).getChildAt(2)).visibility = View.INVISIBLE
+        }
+        resize(item, wideW, animate) {
+            cardsScroll.smoothScrollTo((item.left - dp(4)).coerceAtLeast(0), 0)
+        }
+        ((item as ViewGroup).getChildAt(2)).visibility = View.VISIBLE
+    }
+
+    private fun resize(v: View, target: Int, animate: Boolean, done: (() -> Unit)?) {
+        val lp = v.layoutParams ?: return
+        if (!animate) {
+            lp.width = target
+            v.layoutParams = lp
+            v.post { done?.invoke() }
+            return
+        }
+        ValueAnimator.ofInt(lp.width, target).apply {
+            duration = 220
+            addUpdateListener {
+                lp.width = it.animatedValue as Int
+                v.layoutParams = lp
+            }
+            addListener(object : android.animation.AnimatorListenerAdapter() {
+                override fun onAnimationEnd(a: android.animation.Animator) {
+                    done?.invoke()
+                }
+            })
+            start()
+        }
+    }
+
+    private fun onCardSelected(c: Card, img: ImageView, meta: TextView) {
+        setBackdrop((img.drawable as? BitmapDrawable)?.bitmap)
+        val tmdb = c.item
+        if (tmdb != null) {
+            if (meta.text.isNullOrEmpty()) meta.text = if (tmdb.type == "tv") "Série" else "Filme"
+            Tmdb.details(tmdb) { d -> if (d.meta.isNotBlank()) meta.text = d.meta }
+        } else {
+            meta.text = "Abrir app"
+        }
+    }
+
+    private fun setBackdrop(b: Bitmap?) {
+        if (b == null) {
+            bgImage.animate().alpha(0f).setDuration(300).start()
+            return
+        }
+        bgImage.setImageBitmap(Tmdb.blur(b))
+        bgImage.alpha = 0.25f
+        bgImage.animate().alpha(0.7f).setDuration(350).start()
+    }
+
+    private fun openCard(c: Card) {
+        val app = c.app
+        if (app != null) {
+            open(app.intent)
+            return
+        }
+        val tmdb = c.item ?: return
+        Tmdb.details(tmdb) { d ->
+            val pkg = d.providerId?.let { Tmdb.packageFor(it) }
+            val launch = pkg?.let {
+                packageManager.getLeanbackLaunchIntentForPackage(it)
+                    ?: packageManager.getLaunchIntentForPackage(it)
+            }
+            when {
+                launch != null -> {
+                    toast("Procure por \"${tmdb.title}\" no ${d.providerName}")
+                    open(launch)
+                }
+                d.providerName != null -> toast("Disponível no ${d.providerName} (app não instalado)")
+                else -> toast("Não encontrei onde assistir no Brasil")
+            }
+        }
+    }
+
+    // ---------- barra de apps ----------
+
+    private fun refreshApps() {
+        buildDock()
+        if (showingFallback) loadCards(force = true)
+    }
+
+    private fun buildDock() {
+        val focusedPkg = (currentFocus?.tag as? String)
+        dockRow.removeAllViews()
+        val apps = AppRepo.load(this)
+        prefs.ensureDefaults(apps)
+        val byPkg = apps.associateBy { it.pkg }
+        val hidden = prefs.hidden
+        val favs = prefs.favs.mapNotNull { byPkg[it] }.filter { it.pkg !in hidden }
+        favs.forEach { dockRow.addView(dockTile(it)) }
+        dockRow.addView(moreTile())
+        if (focusedPkg != null) dockRow.findViewWithTag<View>(focusedPkg)?.requestFocus()
+    }
+
+    private fun dockLp(): LinearLayout.LayoutParams {
+        val h = (resources.displayMetrics.heightPixels * 0.13f).toInt()
+        val lp = LinearLayout.LayoutParams(h * 16 / 9, h)
+        lp.rightMargin = dp(18)
+        return lp
+    }
+
+    private fun dockTile(e: AppEntry): View {
+        val card = FrameLayout(this).apply {
+            background = rounded(0xFF2C2C2E.toInt(), 14)
+            clipToOutline = true
+            isFocusable = true
+            isClickable = true
+            tag = e.pkg
+        }
+        val banner = AppRepo.banner(this, e)
+        if (banner != null) {
             card.addView(
                 ImageView(this).apply {
-                    setImageDrawable(t.banner)
+                    setImageDrawable(banner)
                     scaleType = ImageView.ScaleType.FIT_XY
                 },
                 FrameLayout.LayoutParams(MATCH, MATCH),
@@ -348,120 +609,120 @@ class MainActivity : Activity() {
             val col = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
-                setPadding(dp(8), dp(8), dp(8), dp(8))
-            }
-            if (t.icon != null) {
-                col.addView(
-                    ImageView(this).apply { setImageDrawable(t.icon) },
-                    LinearLayout.LayoutParams(dp(52), dp(52)),
-                )
             }
             col.addView(
+                ImageView(this).apply { setImageDrawable(AppRepo.icon(this@MainActivity, e)) },
+                LinearLayout.LayoutParams(dp(30), dp(30)),
+            )
+            col.addView(
                 TextView(this).apply {
-                    text = t.title
-                    textSize = 14f
+                    text = e.label
+                    textSize = 11f
                     setTextColor(Color.WHITE)
                     gravity = Gravity.CENTER
                     maxLines = 1
                     ellipsize = TextUtils.TruncateAt.END
-                    setPadding(0, dp(6), 0, 0)
+                    setPadding(dp(4), dp(3), dp(4), 0)
                 },
                 LinearLayout.LayoutParams(MATCH, WRAP),
             )
             card.addView(col, FrameLayout.LayoutParams(MATCH, MATCH))
         }
-
-        val ring = GradientDrawable().apply {
-            cornerRadius = dpf(14)
-            setColor(Color.TRANSPARENT)
-            setStroke(dp(3), Color.WHITE)
+        styleDockFocus(card)
+        card.setOnClickListener { open(e.intent) }
+        card.setOnLongClickListener {
+            AppMenu.show(this, prefs, e) { refreshApps() }
+            true
         }
-
-        card.setOnFocusChangeListener { v, has ->
-            v.animate()
-                .scaleX(if (has) 1.1f else 1f)
-                .scaleY(if (has) 1.1f else 1f)
-                .translationZ(if (has) dpf(18) else 0f)
-                .setDuration(160)
-                .start()
-            v.foreground = if (has) ring else null
-            if (has) {
-                lastFocusKey = t.key
-                heroTitle.text = t.title
-                backdrop.setImageDrawable(t.banner)
-                if (t.key in topRowKeys) scroll.smoothScrollTo(0, 0)
-            }
-        }
-        card.setOnClickListener { t.onClick() }
-        t.onMenu?.let { menu ->
-            card.setOnLongClickListener {
-                menu()
+        card.setOnKeyListener { _, code, ev ->
+            if (code == KeyEvent.KEYCODE_MENU && ev.action == KeyEvent.ACTION_UP) {
+                AppMenu.show(this, prefs, e) { refreshApps() }
                 true
-            }
-            card.setOnKeyListener { _, code, ev ->
-                if (code == KeyEvent.KEYCODE_MENU && ev.action == KeyEvent.ACTION_UP) {
-                    menu()
-                    true
-                } else {
-                    false
-                }
+            } else {
+                false
             }
         }
+        card.layoutParams = dockLp()
         return card
     }
 
+    private fun moreTile(): View {
+        val card = FrameLayout(this).apply {
+            background = rounded(0x14000000, 14)
+            clipToOutline = true
+            isFocusable = true
+            isClickable = true
+            tag = "#more"
+            setOnClickListener { startActivity(Intent(this@MainActivity, AppsActivity::class.java)) }
+        }
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+        }
+        col.addView(
+            ImageView(this).apply {
+                setImageResource(R.drawable.ic_apps)
+                setColorFilter(INK)
+            },
+            LinearLayout.LayoutParams(dp(24), dp(24)),
+        )
+        col.addView(
+            TextView(this).apply {
+                text = "Todos os apps"
+                textSize = 11f
+                setTextColor(INK)
+                gravity = Gravity.CENTER
+                setPadding(0, dp(4), 0, 0)
+            },
+        )
+        card.addView(col, FrameLayout.LayoutParams(MATCH, MATCH))
+        styleDockFocus(card)
+        card.layoutParams = dockLp()
+        return card
+    }
+
+    private fun styleDockFocus(card: View) {
+        val r = ring(14)
+        card.setOnFocusChangeListener { v, has ->
+            v.foreground = if (has) r else null
+            v.animate()
+                .scaleX(if (has) 1.15f else 1f)
+                .scaleY(if (has) 1.15f else 1f)
+                .translationY(if (has) -dpf(6) else 0f)
+                .translationZ(if (has) dpf(16) else 0f)
+                .setDuration(150)
+                .start()
+        }
+    }
+
     // ---------- ações ----------
+
+    private fun openSearch() {
+        for (action in listOf(Intent.ACTION_ASSIST, "android.search.action.GLOBAL_SEARCH")) {
+            try {
+                startActivity(Intent(action).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                return
+            } catch (_: Throwable) {
+            }
+        }
+        toast("Pesquisa não disponível nessa TV")
+    }
 
     private fun open(i: Intent) {
         try {
             startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (t: Throwable) {
-            Toast.makeText(this, "Não deu para abrir esse app", Toast.LENGTH_SHORT).show()
+            toast("Não deu para abrir esse app")
         }
     }
 
-    private fun showAppMenu(e: AppEntry) {
-        val isFav = e.pkg in prefs.favs
-        val opts = mutableListOf<Pair<String, () -> Unit>>()
-        if (isFav) {
-            opts += "Mover para a esquerda" to { prefs.moveFav(e.pkg, -1); rebuild() }
-            opts += "Mover para a direita" to { prefs.moveFav(e.pkg, 1); rebuild() }
-            opts += "Remover dos favoritos" to { prefs.removeFav(e.pkg); rebuild() }
-        } else {
-            opts += "Adicionar aos favoritos" to { prefs.addFav(e.pkg); rebuild() }
-        }
-        opts += "Ocultar da tela inicial" to {
-            prefs.hide(e.pkg)
-            lastFocusKey = null
-            rebuild()
-        }
-        opts += "Informações do app" to {
-            open(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${e.pkg}")))
-        }
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle(e.label)
-            .setItems(opts.map { it.first }.toTypedArray()) { _, which -> opts[which].second() }
-            .show()
-    }
-
-    private fun showHiddenMenu(hiddenApps: List<AppEntry>) {
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("Escolha um app para voltar a mostrar")
-            .setItems(hiddenApps.map { it.label }.toTypedArray()) { _, which ->
-                prefs.unhide(hiddenApps[which].pkg)
-                rebuild()
-            }
-            .show()
-    }
-
-    private fun updateClock() {
-        val now = Date()
-        clock.text = timeFmt.format(now)
-        dateView.text = dateFmt.format(now).replaceFirstChar { it.titlecase(ptBr) }
+    private fun toast(msg: String) {
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
     }
 
     companion object {
-        private const val COLS = 5
+        private const val INK = 0xFF1C1C1E.toInt()
+        private const val GRAY = 0xFF7C7C82.toInt()
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
         private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
     }
