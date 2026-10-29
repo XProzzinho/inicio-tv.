@@ -91,14 +91,26 @@ class VolumeService : AccessibilityService() {
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
         val code = event.keyCode
-        if (code == KeyEvent.KEYCODE_VOLUME_UP || code == KeyEvent.KEYCODE_VOLUME_DOWN ||
-            code == KeyEvent.KEYCODE_VOLUME_MUTE) {
-            if (event.action == KeyEvent.ACTION_DOWN) {
-                // o sistema muda o volume; lemos o valor novo um instante depois
-                handler.postDelayed({ lerVolume()?.let { ultimo = it; mostrar(it) } }, 250)
+        if (code != KeyEvent.KEYCODE_VOLUME_UP && code != KeyEvent.KEYCODE_VOLUME_DOWN &&
+            code != KeyEvent.KEYCODE_VOLUME_MUTE) return false
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
+        if (am.isVolumeFixed) return false
+        // Nós mesmos mudamos o volume, sem a barra da TV (flags = 0), e
+        // mostramos só o número. Se algo der errado, deixa o sistema tratar.
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            val dir = when (code) {
+                KeyEvent.KEYCODE_VOLUME_UP -> AudioManager.ADJUST_RAISE
+                KeyEvent.KEYCODE_VOLUME_DOWN -> AudioManager.ADJUST_LOWER
+                else -> AudioManager.ADJUST_TOGGLE_MUTE
             }
+            try {
+                am.adjustStreamVolume(AudioManager.STREAM_MUSIC, dir, 0)
+            } catch (_: Throwable) {
+                return false
+            }
+            lerVolume()?.let { ultimo = it; mostrar(it) }
         }
-        return false // deixa o sistema tratar a tecla normalmente
+        return true
     }
 
     private fun lerVolume(): Int? {
