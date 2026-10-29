@@ -47,6 +47,7 @@ class AppsActivity : Activity() {
     private lateinit var heroHint: TextView
     private lateinit var clock: TextView
     private lateinit var dateView: TextView
+    private lateinit var weatherText: TextView
     private lateinit var scroll: ScrollView
     private lateinit var rows: LinearLayout
 
@@ -122,20 +123,20 @@ class AppsActivity : Activity() {
     private fun buildShell(): View {
         val root = FrameLayout(this)
         root.background = GradientDrawable(
-            GradientDrawable.Orientation.TL_BR,
-            intArrayOf(0xFF161C2C.toInt(), 0xFF05060A.toInt()),
+            GradientDrawable.Orientation.TOP_BOTTOM,
+            intArrayOf(0xFFF6F3EF.toInt(), 0xFFE7E2DC.toInt()),
         )
 
         backdrop = ImageView(this).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            alpha = 0.35f
+            alpha = 0.18f
         }
         root.addView(backdrop, FrameLayout.LayoutParams(MATCH, MATCH))
 
         val scrim = View(this).apply {
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0x22000000, 0xB3000000.toInt(), 0xF5000000.toInt()),
+                intArrayOf(0x99F7F4F0.toInt(), 0xD9F7F4F0.toInt(), 0xF2F2EEEA.toInt()),
             )
         }
         root.addView(scrim, FrameLayout.LayoutParams(MATCH, MATCH))
@@ -164,14 +165,14 @@ class AppsActivity : Activity() {
         val heroCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         heroTitle = TextView(this).apply {
             textSize = 40f
-            setTextColor(Color.WHITE)
+            setTextColor(INK)
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
         }
         heroHint = TextView(this).apply {
             textSize = 15f
-            setTextColor(0x99FFFFFF.toInt())
+            setTextColor(GRAY)
             text = "Todos os apps · segure OK num app para favoritar ou ocultar"
         }
         heroCol.addView(heroTitle)
@@ -183,18 +184,26 @@ class AppsActivity : Activity() {
             gravity = Gravity.END
         }
         clock = TextView(this).apply {
-            textSize = 34f
-            setTextColor(Color.WHITE)
-            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+            textSize = 52f
+            setTextColor(INK)
+            typeface = Typeface.create("sans-serif-thin", Typeface.NORMAL)
+            includeFontPadding = false
             gravity = Gravity.END
         }
         dateView = TextView(this).apply {
             textSize = 15f
-            setTextColor(0xB3FFFFFF.toInt())
+            setTextColor(GRAY)
+            gravity = Gravity.END
+            setPadding(0, dp(4), 0, 0)
+        }
+        weatherText = TextView(this).apply {
+            textSize = 15f
+            setTextColor(GRAY)
             gravity = Gravity.END
         }
         clockCol.addView(clock)
         clockCol.addView(dateView)
+        clockCol.addView(weatherText)
         header.addView(clockCol, LinearLayout.LayoutParams(WRAP, WRAP))
         body.addView(header, LinearLayout.LayoutParams(MATCH, WRAP))
 
@@ -280,7 +289,7 @@ class AppsActivity : Activity() {
             this.text = text.uppercase(ptBr)
             textSize = 14f
             letterSpacing = 0.12f
-            setTextColor(0x99FFFFFF.toInt())
+            setTextColor(GRAY)
             setPadding(0, if (first) 0 else dp(36), 0, dp(4))
         }
 
@@ -313,11 +322,12 @@ class AppsActivity : Activity() {
     private fun makeTile(t: Tile): View {
         val bg = GradientDrawable().apply {
             cornerRadius = dpf(14)
-            setColor(if (t.banner != null) 0xFF232A3A.toInt() else palette[Math.floorMod(t.key.hashCode(), palette.size)])
+            setColor(if (t.banner != null) 0xFF2C2C2E.toInt() else Color.WHITE)
         }
         val card = FrameLayout(this).apply {
             background = bg
             clipToOutline = true
+            elevation = dpf(2)
             isFocusable = true
             isClickable = true
             tag = t.key
@@ -347,7 +357,7 @@ class AppsActivity : Activity() {
                 TextView(this).apply {
                     text = t.title
                     textSize = 14f
-                    setTextColor(Color.WHITE)
+                    setTextColor(INK)
                     gravity = Gravity.CENTER
                     maxLines = 1
                     ellipsize = TextUtils.TruncateAt.END
@@ -361,7 +371,7 @@ class AppsActivity : Activity() {
         val ring = GradientDrawable().apply {
             cornerRadius = dpf(14)
             setColor(Color.TRANSPARENT)
-            setStroke(dp(3), Color.WHITE)
+            setStroke(dp(3), INK)
         }
 
         card.setOnFocusChangeListener { v, has ->
@@ -425,10 +435,13 @@ class AppsActivity : Activity() {
         val now = Date()
         clock.text = timeFmt.format(now)
         dateView.text = dateFmt.format(now).replaceFirstChar { it.titlecase(ptBr) }
+        Weather.now { t -> weatherText.text = t ?: "" }
     }
 
     companion object {
         private const val COLS = 5
+        private const val INK = 0xFF1C1C1E.toInt()
+        private const val GRAY = 0xFF7C7C82.toInt()
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
         private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
     }
