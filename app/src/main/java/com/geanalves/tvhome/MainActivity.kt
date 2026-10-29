@@ -59,6 +59,8 @@ class MainActivity : Activity() {
     private var cardH = 0
     private var wideW = 0
     private var narrowW = 0
+    private var bigW = 0
+    private var fixedLayout = false
 
     private val ptBr = Locale("pt", "BR")
     private val timeFmt = SimpleDateFormat("HH:mm", ptBr)
@@ -88,6 +90,9 @@ class MainActivity : Activity() {
         cardH = (dm.heightPixels * 0.36f).toInt()
         wideW = cardH * 16 / 9
         narrowW = (cardH * 0.78f).toInt()
+        // Dois cartazes grandes + um pequeno cabendo na largura da tela
+        val usable = dm.widthPixels - dp(112) - dp(26) * 2 - narrowW
+        bigW = (usable / 2).coerceAtMost(wideW)
         setContentView(buildShell())
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
@@ -399,14 +404,16 @@ class MainActivity : Activity() {
 
     private fun showCards(cards: List<Card>, note: String?) {
         showingFallback = cards.any { it.app != null }
+        fixedLayout = !showingFallback
         status(note)
         val focusWasHere = cardsRow.hasFocus()
         cardsRow.removeAllViews()
         selected = null
         cardsScroll.scrollTo(0, 0)
-        cards.forEach { c ->
+        cards.forEachIndexed { i, c ->
             val v = makeCard(c)
-            val lp = LinearLayout.LayoutParams(narrowW, WRAP)
+            val w = if (fixedLayout && i < 2) bigW else narrowW
+            val lp = LinearLayout.LayoutParams(w, WRAP)
             lp.rightMargin = dp(26)
             cardsRow.addView(v, lp)
         }
@@ -504,6 +511,12 @@ class MainActivity : Activity() {
         if (selected === item) return
         val old = selected
         selected = item
+        if (fixedLayout) {
+            // Destaques fixos: dois grandes e um pequeno, só troca a legenda
+            if (old != null) ((old as ViewGroup).getChildAt(2)).visibility = View.INVISIBLE
+            ((item as ViewGroup).getChildAt(2)).visibility = View.VISIBLE
+            return
+        }
         if (old != null) {
             resize(old, narrowW, animate, null)
             ((old as ViewGroup).getChildAt(2)).visibility = View.INVISIBLE
