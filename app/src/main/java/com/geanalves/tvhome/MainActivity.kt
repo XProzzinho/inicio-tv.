@@ -377,7 +377,7 @@ class MainActivity : Activity() {
             if (items.isEmpty()) {
                 showCards(fallbackCards(), "Sem conexão com o TMDB agora · mostrando seus apps")
             } else {
-                showCards(items.map { Card(it.title, it, null) }, null)
+                showCards(items.take(DESTAQUES).map { Card(it.title, it, null) }, null)
             }
         }
     }
@@ -798,6 +798,8 @@ class MainActivity : Activity() {
     }
 
     companion object {
+        /** Quantos cartazes aparecem em cada aba */
+        private const val DESTAQUES = 3
         private const val INK = 0xFF1C1C1E.toInt()
         private const val GRAY = 0xFF7C7C82.toInt()
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
