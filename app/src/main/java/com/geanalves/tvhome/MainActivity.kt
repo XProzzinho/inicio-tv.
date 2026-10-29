@@ -853,57 +853,172 @@ class MainActivity : Activity() {
         greeting.text = saudacao()
     }
 
-    /** Trocar de perfil ou mudar o nome do perfil atual. */
-    private fun showProfiles() {
-        val atual = prefs.perfil
-        val itens = (0 until Prefs.PERFIS).map { i ->
-            (if (i == atual) "✓  " else "     ") + prefs.nome(i)
-        } + "Mudar o nome de \"${prefs.nome(atual)}\""
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("Quem está assistindo?")
-            .setItems(itens.toTypedArray()) { _, which ->
-                if (which < Prefs.PERFIS) {
-                    prefs.perfil = which
-                    refreshProfile()
-                    refreshApps()
-                } else {
-                    renameProfile(atual)
-                }
-            }
-            .show()
+    // ---------- perfis: janela branca e limpa ----------
+
+    private fun whiteDialog(): Pair<android.app.Dialog, LinearLayout> {
+        val d = android.app.Dialog(this)
+        d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            background = rounded(Color.WHITE, 28)
+            setPadding(dp(44), dp(30), dp(44), dp(28))
+            elevation = dpf(24)
+        }
+        d.setContentView(box)
+        d.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+        d.window?.setDimAmount(0.35f)
+        return d to box
     }
 
+    private fun dialogTitle(text: String): TextView =
+        TextView(this).apply {
+            this.text = text
+            textSize = 24f
+            setTextColor(PRETO)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            gravity = Gravity.CENTER
+        }
+
+    /** Botão em pílula: cinza-claro, fica preto quando selecionado. */
+    private fun pill(text: String, onClick: () -> Unit): TextView {
+        val bg = rounded(0xFFF2F2F7.toInt(), 22)
+        return TextView(this).apply {
+            this.text = text
+            textSize = 16f
+            setTextColor(PRETO)
+            gravity = Gravity.CENTER
+            background = bg
+            setPadding(dp(26), dp(10), dp(26), dp(10))
+            isFocusable = true
+            isClickable = true
+            setOnClickListener { onClick() }
+            setOnFocusChangeListener { v, has ->
+                bg.setColor(if (has) PRETO else 0xFFF2F2F7.toInt())
+                setTextColor(if (has) Color.WHITE else PRETO)
+                v.animate().scaleX(if (has) 1.06f else 1f).scaleY(if (has) 1.06f else 1f).setDuration(120).start()
+            }
+        }
+    }
+
+    /** Bolinha colorida com a inicial do nome. */
+    private fun avatarCircle(i: Int, sizeDp: Int, textSp: Float): TextView =
+        TextView(this).apply {
+            text = prefs.nome(i).trim().take(1).uppercase(ptBr)
+            textSize = textSp
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Prefs.CORES_PERFIL[i])
+            }
+            layoutParams = FrameLayout.LayoutParams(dp(sizeDp), dp(sizeDp), Gravity.CENTER)
+        }
+
+    /** Quem está assistindo? Três bolinhas e o botão Editar perfil. */
+    private fun showProfiles() {
+        val atual = prefs.perfil
+        val (d, box) = whiteDialog()
+        box.addView(dialogTitle("Quem está assistindo?"))
+
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, dp(26), 0, dp(24))
+            clipChildren = false
+            clipToPadding = false
+        }
+        var focusMe: View? = null
+        for (i in 0 until Prefs.PERFIS) {
+            val ringBg = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(Color.TRANSPARENT)
+                if (i == atual) setStroke(dp(3), 0xFFD1D1D6.toInt())
+            }
+            val holder = FrameLayout(this).apply { background = ringBg }
+            holder.addView(avatarCircle(i, 76, 30f))
+            val name = TextView(this).apply {
+                text = prefs.nome(i)
+                textSize = 16f
+                setTextColor(PRETO)
+                gravity = Gravity.CENTER
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+                typeface = if (i == atual) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                setPadding(0, dp(10), 0, 0)
+            }
+            val col = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER_HORIZONTAL
+                isFocusable = true
+                isClickable = true
+                setPadding(dp(10), dp(6), dp(10), dp(6))
+                setOnClickListener {
+                    prefs.perfil = i
+                    refreshProfile()
+                    refreshApps()
+                    d.dismiss()
+                }
+                setOnFocusChangeListener { _, has ->
+                    ringBg.setStroke(dp(3), if (has) PRETO else if (i == atual) 0xFFD1D1D6.toInt() else Color.TRANSPARENT)
+                    holder.animate().scaleX(if (has) 1.1f else 1f).scaleY(if (has) 1.1f else 1f).setDuration(140).start()
+                }
+            }
+            col.addView(holder, LinearLayout.LayoutParams(dp(88), dp(88)))
+            col.addView(name, LinearLayout.LayoutParams(dp(110), WRAP))
+            val lp = LinearLayout.LayoutParams(WRAP, WRAP)
+            lp.leftMargin = dp(10)
+            lp.rightMargin = dp(10)
+            row.addView(col, lp)
+            if (i == atual) focusMe = col
+        }
+        box.addView(row)
+        box.addView(pill("Editar perfil") {
+            d.dismiss()
+            renameProfile(atual)
+        })
+        d.show()
+        focusMe?.post { focusMe?.requestFocus() }
+    }
+
+    /** Editar perfil: só o nome, numa janela branca. */
     private fun renameProfile(i: Int) {
+        val (d, box) = whiteDialog()
+        box.addView(dialogTitle("Editar perfil"))
+        val holder = FrameLayout(this).apply { setPadding(0, dp(20), 0, dp(16)) }
+        holder.addView(avatarCircle(i, 64, 26f))
+        box.addView(holder, LinearLayout.LayoutParams(WRAP, WRAP))
         val input = android.widget.EditText(this).apply {
             setText(prefs.nome(i))
             setSelectAllOnFocus(true)
             setSingleLine()
+            textSize = 18f
+            setTextColor(PRETO)
+            setHintTextColor(0xFF8E8E93.toInt())
+            hint = "Nome"
+            gravity = Gravity.CENTER
+            background = rounded(0xFFF2F2F7.toInt(), 14)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
         }
-        val box = FrameLayout(this).apply { setPadding(dp(24), dp(8), dp(24), 0) }
-        box.addView(input)
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("Nome do perfil")
-            .setView(box)
-            .setPositiveButton("Salvar") { _, _ ->
-                prefs.setNome(i, input.text.toString())
-                refreshProfile()
-            }
-            .setNegativeButton("Cancelar", null)
-            .show()
-    }
-
-    private fun showForecast() {
-        Weather.week { lines ->
-            if (lines.isEmpty()) {
-                toast("Não deu para pegar a previsão agora")
-            } else {
-                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                    .setTitle("Previsão · Pirapora (MG)")
-                    .setItems(lines.toTypedArray(), null)
-                    .setPositiveButton("Fechar", null)
-                    .show()
-            }
+        box.addView(input, LinearLayout.LayoutParams(dp(300), WRAP))
+        val buttons = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, dp(22), 0, 0)
         }
+        buttons.addView(pill("Cancelar") { d.dismiss() })
+        val save = pill("Salvar") {
+            prefs.setNome(i, input.text.toString())
+            refreshProfile()
+            d.dismiss()
+        }
+        val slp = LinearLayout.LayoutParams(WRAP, WRAP)
+        slp.leftMargin = dp(14)
+        buttons.addView(save, slp)
+        box.addView(buttons)
+        d.show()
+        input.post { input.requestFocus() }
     }
 
     private fun resetIdle() {
@@ -1076,6 +1191,7 @@ class MainActivity : Activity() {
         private const val DESTAQUES = 3
         private val INK: Int get() = Cores.tinta
         private val GRAY: Int get() = Cores.cinza
+        private const val PRETO = 0xFF1C1C1E.toInt()
         private const val DOCK_APPS = 7
         private const val DOCK_GAP = 12
         /** Tempo parado até o descanso de tela (3 minutos) */
