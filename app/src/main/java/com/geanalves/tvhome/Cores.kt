@@ -32,8 +32,8 @@ object Cores {
     val papel: Int get() = if (escuro) 0xFF1C1C1E.toInt() else 0xFFFFFFFF.toInt()
 
     // Fundo
-    val fundoTopo: Int get() = if (escuro) 0xFF1E1E24.toInt() else 0xFFF6F3EF.toInt()
-    val fundoBase: Int get() = if (escuro) 0xFF0B0B0F.toInt() else 0xFFE7E2DC.toInt()
+    val fundoTopo: Int get() = if (escuro) 0xFF1E1E24.toInt() else 0xFFFFFFFF.toInt()
+    val fundoBase: Int get() = if (escuro) 0xFF0B0B0F.toInt() else 0xFFF1F1F4.toInt()
     val veu: IntArray
         get() = if (escuro) {
             intArrayOf(0xB31E1E24.toInt(), 0x661E1E24, 0xE00B0B0F.toInt())
@@ -42,9 +42,9 @@ object Cores {
         }
 
     // Peças
-    val barra: Int get() = if (escuro) 0x26FFFFFF else 0xBFFFFFFF.toInt()
+    val barra: Int get() = if (escuro) 0x26FFFFFF else 0xFFFFFFFF.toInt()
     val botao: Int get() = if (escuro) 0x33FFFFFF else 0xCCFFFFFF.toInt()
-    val cartao: Int get() = if (escuro) 0xFF2C2C2E.toInt() else 0xFFD9D3CC.toInt()
+    val cartao: Int get() = if (escuro) 0xFF2C2C2E.toInt() else 0xFFE5E5EA.toInt()
     val cartaoApp: Int get() = if (escuro) 0xFF2C2C2E.toInt() else 0xFFFFFFFF.toInt()
     val sutil: Int get() = if (escuro) 0x1FFFFFFF else 0x1A000000
 }

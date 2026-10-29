@@ -330,9 +330,19 @@ class MainActivity : Activity() {
         clp.rightMargin = dp(8)
         top.addView(clockCol, clp)
         // Entradas (HDMI), Wi-Fi e Configurações
-        top.addView(iconButton(R.drawable.ic_input) { openInputs() })
-        top.addView(iconButton(R.drawable.ic_wifi) { openWifi() })
-        top.addView(iconButton(R.drawable.ic_menu) { open(Intent(Settings.ACTION_SETTINGS)) })
+        val group = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = rounded(Color.WHITE, 30)
+            elevation = dpf(3)
+            setPadding(dp(6), dp(6), dp(6), dp(6))
+            clipChildren = false
+            clipToPadding = false
+        }
+        group.addView(groupButton(R.drawable.ic_input, first = true) { openInputs() })
+        group.addView(groupButton(R.drawable.ic_wifi) { openWifi() })
+        group.addView(groupButton(R.drawable.ic_menu) { open(Intent(Settings.ACTION_SETTINGS)) })
+        top.addView(group, LinearLayout.LayoutParams(WRAP, WRAP))
         content.addView(top, LinearLayout.LayoutParams(MATCH, WRAP))
 
         // --- carrossel
@@ -369,6 +379,7 @@ class MainActivity : Activity() {
         // --- barra de apps
         val dock = FrameLayout(this).apply {
             background = rounded(Cores.barra, 30)
+            elevation = dpf(3)
             setPadding(dp(16), dp(12), dp(16), dp(12))
             clipChildren = false
             clipToPadding = false
@@ -428,6 +439,31 @@ class MainActivity : Activity() {
             }
             t.typeface = if (i == currentTab) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
         }
+    }
+
+    /** Botão dentro da barra branca: sem fundo, fica preto quando selecionado. */
+    private fun groupButton(res: Int, first: Boolean = false, onClick: () -> Unit): View {
+        val bg = rounded(Color.TRANSPARENT, 24)
+        val icon = ImageView(this).apply {
+            setImageResource(res)
+            setColorFilter(PRETO)
+        }
+        val b = FrameLayout(this).apply {
+            background = bg
+            isFocusable = true
+            isClickable = true
+            setOnClickListener { onClick() }
+            setOnFocusChangeListener { v, has ->
+                bg.setColor(if (has) PRETO else Color.TRANSPARENT)
+                icon.setColorFilter(if (has) Color.WHITE else PRETO)
+                v.animate().scaleX(if (has) 1.08f else 1f).scaleY(if (has) 1.08f else 1f).setDuration(120).start()
+            }
+        }
+        b.addView(icon, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER))
+        val lp = LinearLayout.LayoutParams(dp(46), dp(46))
+        if (!first) lp.leftMargin = dp(4)
+        b.layoutParams = lp
+        return b
     }
 
     private fun iconButton(res: Int, onClick: () -> Unit): View {
@@ -671,7 +707,8 @@ class MainActivity : Activity() {
     }
 
     private fun setBackdrop(b: Bitmap?) {
-        if (b == null) {
+        // Fundo sempre branco e limpo: não mostra mais o filme atrás
+        if (!FUNDO_COM_FILME || b == null) {
             bgImage.animate().alpha(0f).setDuration(300).start()
             return
         }
@@ -1380,6 +1417,8 @@ class MainActivity : Activity() {
         private val GRAY: Int get() = Cores.cinza
         private const val PRETO = 0xFF1C1C1E.toInt()
         private const val TAB_CONTINUAR = 3
+        /** Mude para true para o fundo pegar as cores do filme selecionado */
+        private const val FUNDO_COM_FILME = false
         /** Os 15 avatares desenhados: 0-4 feminino, 5-9 masculino, 10-14 infantil */
         private val AVATARES = intArrayOf(
             R.drawable.avatar_00, R.drawable.avatar_01, R.drawable.avatar_02, R.drawable.avatar_03, R.drawable.avatar_04,
