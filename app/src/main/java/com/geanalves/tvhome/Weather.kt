@@ -51,6 +51,46 @@ object Weather {
         }.start()
     }
 
+    private const val URL_WEEK = "https://api.open-meteo.com/v1/forecast" +
+        "?latitude=-17.345&longitude=-44.942" +
+        "&daily=weather_code,temperature_2m_max,temperature_2m_min" +
+        "&forecast_days=7&timezone=America%2FSao_Paulo"
+
+    /** Previsão de 7 dias: "Qui, 29 · 33° / 21° · Céu limpo". Lista vazia se não conseguir. */
+    fun week(cb: (List<String>) -> Unit) {
+        Thread {
+            val lines = try {
+                val c = URL(URL_WEEK).openConnection() as HttpURLConnection
+                c.connectTimeout = 8000
+                c.readTimeout = 10000
+                val json = try {
+                    JSONObject(c.inputStream.bufferedReader().use { it.readText() })
+                } finally {
+                    c.disconnect()
+                }
+                val d = json.getJSONObject("daily")
+                val days = d.getJSONArray("time")
+                val codes = d.getJSONArray("weather_code")
+                val max = d.getJSONArray("temperature_2m_max")
+                val min = d.getJSONArray("temperature_2m_min")
+                val inFmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
+                val outFmt = java.text.SimpleDateFormat("EEE, d", java.util.Locale("pt", "BR"))
+                (0 until days.length()).map { i ->
+                    val date = inFmt.parse(days.getString(i))
+                    val dia = if (i == 0) "Hoje" else outFmt.format(date!!)
+                        .replace(".", "")
+                        .replaceFirstChar { it.uppercase() }
+                    val hi = max.getDouble(i).roundToInt()
+                    val lo = min.getDouble(i).roundToInt()
+                    "$dia  ·  $hi° / $lo°  ·  ${describe(codes.optInt(i, -1))}"
+                }
+            } catch (_: Throwable) {
+                emptyList()
+            }
+            main.post { cb(lines) }
+        }.start()
+    }
+
     private fun describe(code: Int): String = when (code) {
         0 -> "Céu limpo"
         1 -> "Poucas nuvens"

@@ -31,6 +31,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -47,6 +48,13 @@ class MainActivity : Activity() {
     private lateinit var dockRow: LinearLayout
     private lateinit var clock: TextView
     private lateinit var weatherText: TextView
+    private lateinit var greeting: TextView
+    private lateinit var saver: FrameLayout
+    private lateinit var saverImg: ImageView
+    private lateinit var saverClock: TextView
+    private lateinit var saverTitle: TextView
+    private var saverItems: List<Tmdb.Item> = emptyList()
+    private var saverIndex = 0
     private val tabs = ArrayList<TextView>()
 
     private val handler = Handler(Looper.getMainLooper())
@@ -67,9 +75,25 @@ class MainActivity : Activity() {
 
     private val tick = object : Runnable {
         override fun run() {
+            // Virou noite/dia: refaz a tela com as cores certas
+            if (Cores.atualizar()) {
+                recreate()
+                return
+            }
             clock.text = timeFmt.format(Date())
+            greeting.text = saudacao()
+            if (saver.visibility == View.VISIBLE) saverClock.text = clock.text
             Weather.now { t -> weatherText.text = t ?: "" }
             handler.postDelayed(this, 10_000)
+        }
+    }
+
+    private val idle = Runnable { showSaver() }
+
+    private val saverNext = object : Runnable {
+        override fun run() {
+            nextSaverImage()
+            handler.postDelayed(this, 12_000)
         }
     }
 
@@ -93,6 +117,8 @@ class MainActivity : Activity() {
         // Dois cartazes grandes + um pequeno cabendo na largura da tela
         val usable = dm.widthPixels - dp(112) - dp(26) * 2 - narrowW
         bigW = (usable / 2).coerceAtMost(wideW)
+        Cores.atualizar()
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Cores.fundoTopo))
         setContentView(buildShell())
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
@@ -110,11 +136,30 @@ class MainActivity : Activity() {
         buildDock()
         handler.removeCallbacks(tick)
         handler.post(tick)
+        resetIdle()
     }
 
     override fun onPause() {
         super.onPause()
         handler.removeCallbacks(tick)
+        handler.removeCallbacks(idle)
+        handler.removeCallbacks(saverNext)
+        saver.visibility = View.GONE
+    }
+
+    // Qualquer tecla do controle tira o descanso de tela e reinicia a contagem
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (::saver.isInitialized && saver.visibility == View.VISIBLE) {
+            if (event.action == KeyEvent.ACTION_UP) hideSaver()
+            return true
+        }
+        resetIdle()
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        resetIdle()
     }
 
     override fun onDestroy() {
@@ -162,7 +207,7 @@ class MainActivity : Activity() {
         val root = FrameLayout(this).apply {
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xFFF6F3EF.toInt(), 0xFFE7E2DC.toInt()),
+                intArrayOf(Cores.fundoTopo, Cores.fundoBase),
             )
         }
         bgImage = ImageView(this).apply {
@@ -174,7 +219,7 @@ class MainActivity : Activity() {
             View(this).apply {
                 background = GradientDrawable(
                     GradientDrawable.Orientation.TOP_BOTTOM,
-                    intArrayOf(0xB3F7F4F0.toInt(), 0x66F7F4F0, 0xD9F2EEEA.toInt()),
+                    Cores.veu,
                 )
             },
             FrameLayout.LayoutParams(MATCH, MATCH),
@@ -194,6 +239,13 @@ class MainActivity : Activity() {
             gravity = Gravity.TOP
         }
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        greeting = TextView(this).apply {
+            text = saudacao()
+            textSize = 18f
+            setTextColor(GRAY)
+            setPadding(dp(2), 0, 0, dp(2))
+        }
+        left.addView(greeting)
         left.addView(
             TextView(this).apply {
                 text = "Para você"
@@ -217,9 +269,17 @@ class MainActivity : Activity() {
         top.addView(left, LinearLayout.LayoutParams(0, WRAP, 1f))
 
         // Relógio grande com o clima de Pirapora embaixo
+        // Toque no relógio/clima para ver a previsão da semana
+        val clockBg = rounded(Color.TRANSPARENT, 18)
         val clockCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.END
+            background = clockBg
+            setPadding(dp(14), dp(4), dp(14), dp(8))
+            isFocusable = true
+            isClickable = true
+            setOnClickListener { showForecast() }
+            setOnFocusChangeListener { _, has -> clockBg.setColor(if (has) Cores.sutil else Color.TRANSPARENT) }
         }
         clock = TextView(this).apply {
             textSize = 52f
@@ -237,7 +297,7 @@ class MainActivity : Activity() {
         clockCol.addView(clock, LinearLayout.LayoutParams(WRAP, WRAP))
         clockCol.addView(weatherText, LinearLayout.LayoutParams(WRAP, WRAP))
         val clp = LinearLayout.LayoutParams(WRAP, WRAP)
-        clp.rightMargin = dp(22)
+        clp.rightMargin = dp(8)
         top.addView(clockCol, clp)
         // Só o botão de Configurações
         top.addView(iconButton(R.drawable.ic_menu) { open(Intent(Settings.ACTION_SETTINGS)) })
@@ -276,7 +336,7 @@ class MainActivity : Activity() {
 
         // --- barra de apps
         val dock = FrameLayout(this).apply {
-            background = rounded(0xBFFFFFFF.toInt(), 30)
+            background = rounded(Cores.barra, 30)
             setPadding(dp(16), dp(12), dp(16), dp(12))
             clipChildren = false
             clipToPadding = false
@@ -296,6 +356,9 @@ class MainActivity : Activity() {
         dockScroll.addView(dockRow, FrameLayout.LayoutParams(WRAP, WRAP))
         dock.addView(dockScroll, FrameLayout.LayoutParams(MATCH, WRAP))
         content.addView(dock, LinearLayout.LayoutParams(MATCH, WRAP))
+
+        saver = buildSaver()
+        root.addView(saver, FrameLayout.LayoutParams(MATCH, MATCH))
         return root
     }
 
@@ -320,10 +383,10 @@ class MainActivity : Activity() {
             when {
                 t.isFocused -> {
                     bg.setColor(INK)
-                    t.setTextColor(Color.WHITE)
+                    t.setTextColor(Cores.papel)
                 }
                 i == currentTab -> {
-                    bg.setColor(0x1A000000)
+                    bg.setColor(Cores.sutil)
                     t.setTextColor(INK)
                 }
                 else -> {
@@ -336,7 +399,7 @@ class MainActivity : Activity() {
     }
 
     private fun iconButton(res: Int, onClick: () -> Unit): View {
-        val bg = rounded(0xCCFFFFFF.toInt(), 24)
+        val bg = rounded(Cores.botao, 24)
         val icon = ImageView(this).apply {
             setImageResource(res)
             setColorFilter(INK)
@@ -347,8 +410,8 @@ class MainActivity : Activity() {
             isClickable = true
             setOnClickListener { onClick() }
             setOnFocusChangeListener { v, has ->
-                bg.setColor(if (has) INK else 0xCCFFFFFF.toInt())
-                icon.setColorFilter(if (has) Color.WHITE else INK)
+                bg.setColor(if (has) INK else Cores.botao)
+                icon.setColorFilter(if (has) Cores.papel else INK)
                 v.animate().scaleX(if (has) 1.12f else 1f).scaleY(if (has) 1.12f else 1f).setDuration(120).start()
             }
         }
@@ -430,7 +493,7 @@ class MainActivity : Activity() {
             clipToPadding = false
         }
         val frame = FrameLayout(this).apply {
-            background = rounded(0xFFD9D3CC.toInt(), 18)
+            background = rounded(Cores.cartao, 18)
             clipToOutline = true
             isFocusable = true
             isClickable = true
@@ -680,7 +743,7 @@ class MainActivity : Activity() {
 
     private fun moreTile(): View {
         val card = FrameLayout(this).apply {
-            background = rounded(0x14000000, 14)
+            background = rounded(Cores.sutil, 14)
             clipToOutline = true
             isFocusable = true
             isClickable = true
@@ -725,6 +788,117 @@ class MainActivity : Activity() {
                 .setDuration(150)
                 .start()
         }
+    }
+
+    // ---------- saudação, previsão e descanso de tela ----------
+
+    private fun saudacao(): String {
+        val h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val p = when {
+            h < 5 -> "Boa noite"
+            h < 12 -> "Bom dia"
+            h < 18 -> "Boa tarde"
+            else -> "Boa noite"
+        }
+        return "$p, $NOME"
+    }
+
+    private fun showForecast() {
+        Weather.week { lines ->
+            if (lines.isEmpty()) {
+                toast("Não deu para pegar a previsão agora")
+            } else {
+                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("Previsão · Pirapora (MG)")
+                    .setItems(lines.toTypedArray(), null)
+                    .setPositiveButton("Fechar", null)
+                    .show()
+            }
+        }
+    }
+
+    private fun resetIdle() {
+        handler.removeCallbacks(idle)
+        handler.postDelayed(idle, IDLE_MS)
+    }
+
+    private fun buildSaver(): FrameLayout {
+        val f = FrameLayout(this).apply {
+            setBackgroundColor(Color.BLACK)
+            visibility = View.GONE
+            isClickable = true
+            setOnClickListener { hideSaver() }
+        }
+        saverImg = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
+        f.addView(saverImg, FrameLayout.LayoutParams(MATCH, MATCH))
+        f.addView(
+            View(this).apply {
+                background = GradientDrawable(
+                    GradientDrawable.Orientation.TOP_BOTTOM,
+                    intArrayOf(0x00000000, 0x22000000, 0xCC000000.toInt()),
+                )
+            },
+            FrameLayout.LayoutParams(MATCH, MATCH),
+        )
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(56), 0, dp(56), dp(44))
+        }
+        saverClock = TextView(this).apply {
+            textSize = 76f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.create("sans-serif-thin", Typeface.NORMAL)
+            includeFontPadding = false
+        }
+        saverTitle = TextView(this).apply {
+            textSize = 20f
+            setTextColor(0xCCFFFFFF.toInt())
+            setPadding(dp(4), dp(6), 0, 0)
+        }
+        col.addView(saverClock)
+        col.addView(saverTitle)
+        f.addView(col, FrameLayout.LayoutParams(MATCH, WRAP, Gravity.BOTTOM))
+        return f
+    }
+
+    private fun showSaver() {
+        if (saver.visibility == View.VISIBLE) return
+        saverClock.text = timeFmt.format(Date())
+        saverTitle.text = weatherText.text
+        saver.alpha = 0f
+        saver.visibility = View.VISIBLE
+        saver.animate().alpha(1f).setDuration(600).start()
+        if (Tmdb.enabled) {
+            Tmdb.list(0) { items ->
+                saverItems = items
+                handler.removeCallbacks(saverNext)
+                handler.post(saverNext)
+            }
+        }
+    }
+
+    private fun nextSaverImage() {
+        saverClock.text = timeFmt.format(Date())
+        if (saverItems.isEmpty()) return
+        val item = saverItems[saverIndex % saverItems.size]
+        saverIndex++
+        Tmdb.image(item.backdrop, "w1280") { b ->
+            if (b != null && saver.visibility == View.VISIBLE) {
+                saverImg.alpha = 0f
+                saverImg.setImageBitmap(b)
+                saverImg.animate().alpha(1f).setDuration(900).start()
+                saverTitle.text = item.title
+            }
+        }
+    }
+
+    private fun hideSaver() {
+        handler.removeCallbacks(saverNext)
+        saver.animate().alpha(0f).setDuration(250).withEndAction {
+            saver.visibility = View.GONE
+            saverImg.setImageDrawable(null)
+        }.start()
+        resetIdle()
     }
 
     // ---------- ações ----------
@@ -811,8 +985,11 @@ class MainActivity : Activity() {
     companion object {
         /** Quantos cartazes aparecem em cada aba */
         private const val DESTAQUES = 3
-        private const val INK = 0xFF1C1C1E.toInt()
-        private const val GRAY = 0xFF7C7C82.toInt()
+        private val INK: Int get() = Cores.tinta
+        private val GRAY: Int get() = Cores.cinza
+        private const val NOME = "Geanderson"
+        /** Tempo parado até o descanso de tela (3 minutos) */
+        private const val IDLE_MS = 3 * 60_000L
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
         private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
     }

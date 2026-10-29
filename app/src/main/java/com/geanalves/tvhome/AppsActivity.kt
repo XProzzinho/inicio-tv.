@@ -84,6 +84,8 @@ class AppsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
+        Cores.atualizar()
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Cores.fundoTopo))
         setContentView(buildShell())
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
@@ -124,7 +126,7 @@ class AppsActivity : Activity() {
         val root = FrameLayout(this)
         root.background = GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
-            intArrayOf(0xFFF6F3EF.toInt(), 0xFFE7E2DC.toInt()),
+            intArrayOf(Cores.fundoTopo, Cores.fundoBase),
         )
 
         backdrop = ImageView(this).apply {
@@ -136,7 +138,11 @@ class AppsActivity : Activity() {
         val scrim = View(this).apply {
             background = GradientDrawable(
                 GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0x99F7F4F0.toInt(), 0xD9F7F4F0.toInt(), 0xF2F2EEEA.toInt()),
+                if (Cores.escuro) {
+                    intArrayOf(0x991E1E24.toInt(), 0xD91E1E24.toInt(), 0xF20B0B0F.toInt())
+                } else {
+                    intArrayOf(0x99F7F4F0.toInt(), 0xD9F7F4F0.toInt(), 0xF2F2EEEA.toInt())
+                },
             )
         }
         root.addView(scrim, FrameLayout.LayoutParams(MATCH, MATCH))
@@ -322,7 +328,7 @@ class AppsActivity : Activity() {
     private fun makeTile(t: Tile): View {
         val bg = GradientDrawable().apply {
             cornerRadius = dpf(14)
-            setColor(if (t.banner != null) 0xFF2C2C2E.toInt() else Color.WHITE)
+            setColor(if (t.banner != null) 0xFF2C2C2E.toInt() else Cores.cartaoApp)
         }
         val card = FrameLayout(this).apply {
             background = bg
@@ -440,8 +446,8 @@ class AppsActivity : Activity() {
 
     companion object {
         private const val COLS = 5
-        private const val INK = 0xFF1C1C1E.toInt()
-        private const val GRAY = 0xFF7C7C82.toInt()
+        private val INK: Int get() = Cores.tinta
+        private val GRAY: Int get() = Cores.cinza
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
         private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
     }
