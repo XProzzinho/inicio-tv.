@@ -3,6 +3,10 @@ package com.geanalves.tvhome
 import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.AlertDialog
+import android.Manifest
+import android.content.pm.PackageManager
+import android.media.AudioManager
+import android.net.wifi.WifiManager
 import android.media.tv.TvContract
 import android.media.tv.TvInputInfo
 import android.media.tv.TvInputManager
@@ -122,6 +126,7 @@ class MainActivity : Activity() {
         Cores.atualizar()
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Cores.fundoTopo))
         setContentView(buildShell())
+        buildVolumeOverlay()
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
             addAction(Intent.ACTION_PACKAGE_REMOVED)
@@ -157,7 +162,62 @@ class MainActivity : Activity() {
             return true
         }
         resetIdle()
+        if (handleVolumeKey(event)) return true
         return super.dispatchKeyEvent(event)
+    }
+
+    // ---------- volume: só o número, grande, na lateral direita ----------
+
+    private lateinit var volumeText: TextView
+    private val volumeHide = Runnable {
+        volumeText.animate().alpha(0f).setDuration(350).start()
+    }
+
+    private fun buildVolumeOverlay() {
+        volumeText = TextView(this).apply {
+            textSize = 66f
+            setTextColor(0xFF0B0B0D.toInt())
+            typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
+            letterSpacing = -0.04f
+            setShadowLayer(dpf(14), 0f, dpf(3), 0x66000000)
+            alpha = 0f
+            elevation = dpf(30)
+        }
+        // brilho branco atrás do número, para ler em qualquer fundo claro
+        volumeText.setShadowLayer(dpf(16), 0f, 0f, Color.WHITE)
+        val lp = FrameLayout.LayoutParams(WRAP, WRAP, Gravity.END or Gravity.CENTER_VERTICAL)
+        lp.marginEnd = dp(64)
+        addContentView(volumeText, lp)
+    }
+
+    private fun handleVolumeKey(event: KeyEvent): Boolean {
+        val code = event.keyCode
+        if (code != KeyEvent.KEYCODE_VOLUME_UP && code != KeyEvent.KEYCODE_VOLUME_DOWN &&
+            code != KeyEvent.KEYCODE_VOLUME_MUTE) return false
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
+        if (am.isVolumeFixed) return false
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            val dir = when (code) {
+                KeyEvent.KEYCODE_VOLUME_UP -> AudioManager.ADJUST_RAISE
+                KeyEvent.KEYCODE_VOLUME_DOWN -> AudioManager.ADJUST_LOWER
+                else -> AudioManager.ADJUST_TOGGLE_MUTE
+            }
+            try {
+                am.adjustStreamVolume(AudioManager.STREAM_MUSIC, dir, 0)
+            } catch (_: Throwable) {
+                return false
+            }
+            val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+            val now = am.getStreamVolume(AudioManager.STREAM_MUSIC)
+            val muted = am.isStreamMute(AudioManager.STREAM_MUSIC)
+            val number = if (muted) 0 else Math.round(now * 100f / max)
+            volumeText.text = number.toString()
+            volumeText.animate().cancel()
+            volumeText.alpha = 1f
+            handler.removeCallbacks(volumeHide)
+            handler.postDelayed(volumeHide, 1800)
+        }
+        return true
     }
 
     override fun onUserInteraction() {
@@ -1378,12 +1438,94 @@ class MainActivity : Activity() {
         toast("Use o botão de Entrada (Input) do controle")
     }
 
-    private fun openWifi() {
+    /** Abre as configurações de Wi-Fi do sistema (para trocar de rede e digitar senha). */
+    private fun openWifiSettings() {
         try {
             startActivity(Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (_: Throwable) {
             open(Intent(Settings.ACTION_SETTINGS))
         }
+    }
+
+    /** Janela branca do Wi-Fi: rede atual, redes por perto e botão das configurações. */
+    private fun openWifi() {
+        val wm = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+        if (wm == null) {
+            openWifiSettings()
+            return
+        }
+        val temPermissao = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!temPermissao) {
+            try {
+                requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION), 77)
+            } catch (_: Throwable) {
+            }
+        }
+        var atual: String? = null
+        try {
+            if (wm.isWifiEnabled) {
+                val ssid = wm.connectionInfo?.ssid?.trim('"')
+                if (!ssid.isNullOrBlank() && ssid != "<unknown ssid>" && wm.connectionInfo.networkId != -1) {
+                    atual = ssid
+                }
+            }
+        } catch (_: Throwable) {
+        }
+        val redes: List<Pair<String, Int>> = try {
+            if (temPermissao && wm.isWifiEnabled) {
+                wm.scanResults.orEmpty()
+                    .filter { !it.SSID.isNullOrBlank() }
+                    .groupBy { it.SSID }
+                    .map { (nome, lista) -> nome to lista.maxOf { it.level } }
+                    .sortedByDescending { it.second }
+                    .take(6)
+            } else emptyList()
+        } catch (_: Throwable) {
+            emptyList()
+        }
+        val (d, box) = whiteDialog()
+        box.addView(dialogTitle("Wi-Fi"))
+        val estado = TextView(this).apply {
+            text = when {
+                !wm.isWifiEnabled -> "Wi-Fi desligado"
+                atual != null -> "Conectado a $atual"
+                else -> "Conectado"
+            }
+            textSize = 17f
+            setTextColor(GRAY)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, dp(6))
+        }
+        box.addView(estado)
+        var first: View? = null
+        for ((nome, nivel) in redes) {
+            val barras = when {
+                nivel >= -55 -> "▂▄▆█"
+                nivel >= -67 -> "▂▄▆"
+                nivel >= -80 -> "▂▄"
+                else -> "▂"
+            }
+            val marca = if (nome == atual) "✓  " else ""
+            val p = pill("$marca$nome   $barras") {
+                d.dismiss()
+                openWifiSettings()
+            }
+            val lp = LinearLayout.LayoutParams(dp(340), WRAP)
+            lp.topMargin = dp(8)
+            box.addView(p, lp)
+            if (first == null) first = p
+        }
+        val config = pill("Configurações do Wi-Fi") {
+            d.dismiss()
+            openWifiSettings()
+        }
+        val lp = LinearLayout.LayoutParams(dp(340), WRAP)
+        lp.topMargin = dp(14)
+        box.addView(config, lp)
+        if (first == null) first = config
+        d.show()
+        first?.post { first?.requestFocus() }
     }
 
     private fun openSearch() {
