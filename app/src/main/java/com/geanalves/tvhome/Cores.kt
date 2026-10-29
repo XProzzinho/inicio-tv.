@@ -13,9 +13,12 @@ object Cores {
         return h >= 18 || h < 6
     }
 
+    /** Mude para true para escurecer a tela à noite (18h às 6h). */
+    private const val ESCURO_A_NOITE = false
+
     /** Atualiza o modo conforme a hora. Devolve true se mudou. */
     fun atualizar(): Boolean {
-        val novo = eNoite()
+        val novo = ESCURO_A_NOITE && eNoite()
         val mudou = novo != escuro
         escuro = novo
         return mudou
