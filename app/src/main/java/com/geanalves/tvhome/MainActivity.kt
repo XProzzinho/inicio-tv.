@@ -126,7 +126,6 @@ class MainActivity : Activity() {
         Cores.atualizar()
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Cores.fundoTopo))
         setContentView(buildShell())
-        buildVolumeOverlay()
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
             addAction(Intent.ACTION_PACKAGE_REMOVED)
@@ -140,6 +139,7 @@ class MainActivity : Activity() {
     }
 
     override fun onResume() {
+        handler.postDelayed({ if (!isFinishing) offerVolumeService() }, 1500)
         super.onResume()
         buildDock()
         handler.removeCallbacks(tick)
@@ -162,63 +162,9 @@ class MainActivity : Activity() {
             return true
         }
         resetIdle()
-        if (handleVolumeKey(event)) return true
         return super.dispatchKeyEvent(event)
     }
 
-    // ---------- volume: só o número, grande, na lateral direita ----------
-
-    private lateinit var volumeText: TextView
-    private val volumeHide = Runnable {
-        volumeText.animate().alpha(0f).setDuration(350).start()
-    }
-
-    private fun buildVolumeOverlay() {
-        volumeText = TextView(this).apply {
-            textSize = 66f
-            setTextColor(0xFF0B0B0D.toInt())
-            typeface = Typeface.create("sans-serif-black", Typeface.BOLD)
-            letterSpacing = -0.04f
-            setShadowLayer(dpf(14), 0f, dpf(3), 0x66000000)
-            alpha = 0f
-            elevation = dpf(30)
-        }
-        // brilho branco atrás do número, para ler em qualquer fundo claro
-        volumeText.setShadowLayer(dpf(16), 0f, 0f, Color.WHITE)
-        val lp = FrameLayout.LayoutParams(WRAP, WRAP, Gravity.END or Gravity.CENTER_VERTICAL)
-        lp.marginEnd = dp(64)
-        addContentView(volumeText, lp)
-    }
-
-    private fun handleVolumeKey(event: KeyEvent): Boolean {
-        val code = event.keyCode
-        if (code != KeyEvent.KEYCODE_VOLUME_UP && code != KeyEvent.KEYCODE_VOLUME_DOWN &&
-            code != KeyEvent.KEYCODE_VOLUME_MUTE) return false
-        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return false
-        if (am.isVolumeFixed) return false
-        if (event.action == KeyEvent.ACTION_DOWN) {
-            val dir = when (code) {
-                KeyEvent.KEYCODE_VOLUME_UP -> AudioManager.ADJUST_RAISE
-                KeyEvent.KEYCODE_VOLUME_DOWN -> AudioManager.ADJUST_LOWER
-                else -> AudioManager.ADJUST_TOGGLE_MUTE
-            }
-            try {
-                am.adjustStreamVolume(AudioManager.STREAM_MUSIC, dir, 0)
-            } catch (_: Throwable) {
-                return false
-            }
-            val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
-            val now = am.getStreamVolume(AudioManager.STREAM_MUSIC)
-            val muted = am.isStreamMute(AudioManager.STREAM_MUSIC)
-            val number = if (muted) 0 else Math.round(now * 100f / max)
-            volumeText.text = number.toString()
-            volumeText.animate().cancel()
-            volumeText.alpha = 1f
-            handler.removeCallbacks(volumeHide)
-            handler.postDelayed(volumeHide, 1800)
-        }
-        return true
-    }
 
     override fun onUserInteraction() {
         super.onUserInteraction()
@@ -1436,6 +1382,38 @@ class MainActivity : Activity() {
             return
         }
         toast("Use o botão de Entrada (Input) do controle")
+    }
+
+    /** Pergunta (uma vez) se quer ativar o volume em número, que usa o Acessibilidade da TV. */
+    private fun offerVolumeService() {
+        val sp = getSharedPreferences("volume_numero", Context.MODE_PRIVATE)
+        if (sp.getBoolean("perguntado", false) || VolumeService.enabled(this)) return
+        sp.edit().putBoolean("perguntado", true).apply()
+        val (d, box) = whiteDialog()
+        box.addView(dialogTitle("Volume em número"))
+        val msg = TextView(this).apply {
+            text = "Mostra o volume de 0 a 100 na tela, em qualquer app.\nNa próxima tela, escolha \"Início\" e ative."
+            textSize = 17f
+            setTextColor(GRAY)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(10), 0, dp(6))
+        }
+        box.addView(msg)
+        val ativar = pill("Ativar agora") {
+            d.dismiss()
+            try {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            } catch (_: Throwable) {
+                toast("Abra Configurações > Acessibilidade > Início")
+            }
+        }
+        val depois = pill("Agora não") { d.dismiss() }
+        val lp = LinearLayout.LayoutParams(dp(300), WRAP)
+        lp.topMargin = dp(12)
+        box.addView(ativar, lp)
+        box.addView(depois, LinearLayout.LayoutParams(dp(300), WRAP).apply { topMargin = dp(8) })
+        d.show()
+        ativar.post { ativar.requestFocus() }
     }
 
     /** Abre as configurações de Wi-Fi do sistema (para trocar de rede e digitar senha). */

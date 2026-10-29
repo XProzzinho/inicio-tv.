@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Início</string>
+    <string name="volume_desc">Mostra o volume de 0 a 100 na tela, em qualquer app.</string>
 </resources>
