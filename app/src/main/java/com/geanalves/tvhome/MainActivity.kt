@@ -6,7 +6,9 @@ import android.app.AlertDialog
 import android.Manifest
 import android.content.pm.PackageManager
 import android.media.AudioManager
+import android.net.TrafficStats
 import android.net.wifi.WifiManager
+import android.view.Choreographer
 import android.media.tv.TvContract
 import android.media.tv.TvInputInfo
 import android.media.tv.TvInputManager
@@ -126,6 +128,7 @@ class MainActivity : Activity() {
         Cores.atualizar()
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Cores.fundoTopo))
         setContentView(buildShell())
+        buildMeter()
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
             addAction(Intent.ACTION_PACKAGE_REMOVED)
@@ -141,6 +144,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         handler.postDelayed({ if (!isFinishing) offerVolumeService() }, 1500)
         super.onResume()
+        startMeter()
         buildDock()
         handler.removeCallbacks(tick)
         handler.post(tick)
@@ -149,6 +153,7 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
+        stopMeter()
         handler.removeCallbacks(tick)
         handler.removeCallbacks(idle)
         handler.removeCallbacks(saverNext)
@@ -345,8 +350,9 @@ class MainActivity : Activity() {
             clipChildren = false
             clipToPadding = false
         }
-        group.addView(groupButton(R.drawable.ic_input, first = true) { openInputs() })
-        group.addView(groupButton(R.drawable.ic_wifi) { openWifi() })
+        // O Fire Stick não tem entradas HDMI: sem o botão de Entradas
+        if (!isFireTv()) group.addView(groupButton(R.drawable.ic_input, first = true) { openInputs() })
+        group.addView(groupButton(R.drawable.ic_wifi, first = isFireTv()) { openWifi() })
         group.addView(groupButton(R.drawable.ic_menu) { open(Intent(Settings.ACTION_SETTINGS)) })
         top.addView(group, LinearLayout.LayoutParams(WRAP, WRAP))
         content.addView(top, LinearLayout.LayoutParams(MATCH, WRAP))
@@ -1384,9 +1390,73 @@ class MainActivity : Activity() {
         toast("Use o botão de Entrada (Input) do controle")
     }
 
+    /** true quando o aparelho é um Fire TV / Fire Stick da Amazon. */
+    private fun isFireTv(): Boolean =
+        android.os.Build.MANUFACTURER.equals("Amazon", true) ||
+            packageManager.hasSystemFeature("amazon.hardware.fire_tv")
+
+    // ---------- medidor no canto de baixo: internet (Mb/s) e FPS da tela ----------
+
+    private lateinit var meterText: TextView
+    private var meterOn = false
+    private var frames = 0
+    private var lastRx = 0L
+    private var lastT = 0L
+    private val frameCb = object : Choreographer.FrameCallback {
+        override fun doFrame(frameTimeNanos: Long) {
+            frames++
+            if (meterOn) Choreographer.getInstance().postFrameCallback(this)
+        }
+    }
+    private val meterTick = object : Runnable {
+        override fun run() {
+            if (!meterOn) return
+            val now = android.os.SystemClock.elapsedRealtime()
+            val rx = TrafficStats.getTotalRxBytes()
+            val secs = ((now - lastT) / 1000f).coerceAtLeast(0.2f)
+            val mbps = if (rx >= 0 && lastRx >= 0 && lastT > 0) (rx - lastRx) * 8f / 1_000_000f / secs else 0f
+            val fps = Math.round(frames / secs)
+            lastRx = rx
+            lastT = now
+            frames = 0
+            val net = if (mbps >= 10) "%.0f".format(ptBr, mbps) else "%.1f".format(ptBr, mbps)
+            meterText.text = "↓ $net Mb/s  ·  $fps FPS"
+            handler.postDelayed(this, 1000)
+        }
+    }
+
+    private fun buildMeter() {
+        meterText = TextView(this).apply {
+            textSize = 12f
+            setTextColor(0xFF8E8E93.toInt())
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            setShadowLayer(dpf(6), 0f, 0f, Color.WHITE)
+        }
+        val lp = FrameLayout.LayoutParams(WRAP, WRAP, Gravity.BOTTOM or Gravity.END)
+        lp.marginEnd = dp(20)
+        lp.bottomMargin = dp(8)
+        addContentView(meterText, lp)
+    }
+
+    private fun startMeter() {
+        if (meterOn) return
+        meterOn = true
+        frames = 0
+        lastRx = TrafficStats.getTotalRxBytes()
+        lastT = android.os.SystemClock.elapsedRealtime()
+        Choreographer.getInstance().postFrameCallback(frameCb)
+        handler.postDelayed(meterTick, 1000)
+    }
+
+    private fun stopMeter() {
+        meterOn = false
+        handler.removeCallbacks(meterTick)
+    }
+
     /** Pergunta (uma vez) se quer ativar o volume em número, que usa o Acessibilidade da TV. */
     private fun offerVolumeService() {
         val sp = getSharedPreferences("volume_numero", Context.MODE_PRIVATE)
+        if (isFireTv()) return // o volume do Fire Stick é da TV/controle, não dele
         if (sp.getBoolean("perguntado", false) || VolumeService.enabled(this)) return
         sp.edit().putBoolean("perguntado", true).apply()
         val (d, box) = whiteDialog()
