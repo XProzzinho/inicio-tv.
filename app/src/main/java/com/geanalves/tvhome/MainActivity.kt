@@ -240,7 +240,7 @@ class MainActivity : Activity() {
         clp.rightMargin = dp(22)
         top.addView(clockCol, clp)
         // Só o botão de Configurações
-        top.addView(iconButton(R.drawable.ic_tune) { open(Intent(Settings.ACTION_SETTINGS)) })
+        top.addView(iconButton(R.drawable.ic_menu) { open(Intent(Settings.ACTION_SETTINGS)) })
         content.addView(top, LinearLayout.LayoutParams(MATCH, WRAP))
 
         // --- carrossel
