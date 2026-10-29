@@ -1021,6 +1021,20 @@ class MainActivity : Activity() {
         input.post { input.requestFocus() }
     }
 
+    private fun showForecast() {
+        Weather.week { lines ->
+            if (lines.isEmpty()) {
+                toast("Não deu para pegar a previsão agora")
+            } else {
+                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("Previsão · Pirapora (MG)")
+                    .setItems(lines.toTypedArray(), null)
+                    .setPositiveButton("Fechar", null)
+                    .show()
+            }
+        }
+    }
+
     private fun resetIdle() {
         handler.removeCallbacks(idle)
         handler.postDelayed(idle, IDLE_MS)
