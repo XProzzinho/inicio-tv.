@@ -2,7 +2,10 @@ package com.geanalves.tvhome
 
 import android.accessibilityservice.AccessibilityService
 import android.content.ComponentName
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.graphics.Typeface
@@ -26,6 +29,27 @@ class VolumeService : AccessibilityService() {
     private val handler = Handler(Looper.getMainLooper())
     private var texto: TextView? = null
     private var wm: WindowManager? = null
+    private var ultimo = -1
+
+    // Confere o volume várias vezes por segundo: funciona mesmo que a TV não
+    // entregue as teclas de volume ao Android.
+    private val vigia = object : Runnable {
+        override fun run() {
+            val n = lerVolume()
+            if (n != null && n != ultimo) {
+                if (ultimo != -1) mostrar(n)
+                ultimo = n
+            }
+            handler.postDelayed(this, 200)
+        }
+    }
+
+    private val receptor = object : BroadcastReceiver() {
+        override fun onReceive(c: Context?, i: Intent?) {
+            lerVolume()?.let { ultimo = it; mostrar(it) }
+        }
+    }
+
     private val esconder = Runnable { texto?.animate()?.alpha(0f)?.setDuration(350)?.start() }
 
     override fun onServiceConnected() {
@@ -56,6 +80,13 @@ class VolumeService : AccessibilityService() {
             texto = tv
         } catch (_: Throwable) {
         }
+        ultimo = lerVolume() ?: -1
+        handler.removeCallbacks(vigia)
+        handler.postDelayed(vigia, 200)
+        try {
+            registerReceiver(receptor, IntentFilter("android.media.VOLUME_CHANGED_ACTION"))
+        } catch (_: Throwable) {
+        }
     }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
@@ -64,19 +95,22 @@ class VolumeService : AccessibilityService() {
             code == KeyEvent.KEYCODE_VOLUME_MUTE) {
             if (event.action == KeyEvent.ACTION_DOWN) {
                 // o sistema muda o volume; lemos o valor novo um instante depois
-                handler.postDelayed({ mostrar() }, 140)
+                handler.postDelayed({ lerVolume()?.let { ultimo = it; mostrar(it) } }, 250)
             }
         }
         return false // deixa o sistema tratar a tecla normalmente
     }
 
-    private fun mostrar() {
-        val tv = texto ?: return
-        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return
+    private fun lerVolume(): Int? {
+        val am = getSystemService(Context.AUDIO_SERVICE) as? AudioManager ?: return null
         val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
         val agora = am.getStreamVolume(AudioManager.STREAM_MUSIC)
         val mudo = try { am.isStreamMute(AudioManager.STREAM_MUSIC) } catch (_: Throwable) { false }
-        val n = if (mudo) 0 else Math.round(agora * 100f / max)
+        return if (mudo) 0 else Math.round(agora * 100f / max)
+    }
+
+    private fun mostrar(n: Int) {
+        val tv = texto ?: return
         tv.text = n.toString()
         tv.animate().cancel()
         tv.alpha = 1f
@@ -89,6 +123,8 @@ class VolumeService : AccessibilityService() {
     override fun onInterrupt() {}
 
     override fun onDestroy() {
+        handler.removeCallbacks(vigia)
+        try { unregisterReceiver(receptor) } catch (_: Throwable) {}
         try { texto?.let { wm?.removeView(it) } } catch (_: Throwable) {}
         texto = null
         super.onDestroy()
