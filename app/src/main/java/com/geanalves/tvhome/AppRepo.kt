@@ -122,8 +122,12 @@ class Prefs(ctx: Context) {
         sp.edit().putStringSet("hidden", hidden - p).apply()
     }
 
-    fun addFav(p: String) {
-        if (p !in favs) favs = favs + p
+    /** Adiciona aos favoritos; devolve false se já estão cheios (limite de [MAX_FAVS]). */
+    fun addFav(p: String): Boolean {
+        if (p in favs) return true
+        if (favs.size >= MAX_FAVS) return false
+        favs = favs + p
+        return true
     }
 
     fun removeFav(p: String) {
@@ -156,10 +160,12 @@ class Prefs(ctx: Context) {
         )
         var f = known.filter { it in installed }
         if (f.isEmpty()) f = apps.take(5).map { it.pkg }
-        favs = f
+        favs = f.take(MAX_FAVS)
     }
 
     companion object {
+        /** Máximo de apps favoritos (os 7 do dock) */
+        const val MAX_FAVS = 7
         const val PERFIS = 3
         val NOMES_PADRAO = listOf("Geanderson", "Perfil 2", "Perfil 3")
         val CORES_PERFIL = intArrayOf(0xFF3B82F6.toInt(), 0xFFE0559A.toInt(), 0xFF22A06B.toInt())

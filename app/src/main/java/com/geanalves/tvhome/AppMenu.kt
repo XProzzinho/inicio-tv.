@@ -16,7 +16,17 @@ object AppMenu {
             opts += "Mover para a direita" to { prefs.moveFav(e.pkg, 1); onChanged() }
             opts += "Remover dos favoritos" to { prefs.removeFav(e.pkg); onChanged() }
         } else {
-            opts += "Adicionar aos favoritos" to { prefs.addFav(e.pkg); onChanged() }
+            opts += "Adicionar aos favoritos" to {
+                if (prefs.addFav(e.pkg)) {
+                    onChanged()
+                } else {
+                    android.widget.Toast.makeText(
+                        a,
+                        "Limite de ${Prefs.MAX_FAVS} favoritos. Remova um para adicionar outro.",
+                        android.widget.Toast.LENGTH_LONG,
+                    ).show()
+                }
+            }
         }
         opts += "Ocultar da tela inicial" to { prefs.hide(e.pkg); onChanged() }
         opts += "Informações do app" to {
