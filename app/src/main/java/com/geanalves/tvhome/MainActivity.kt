@@ -2,6 +2,10 @@ package com.geanalves.tvhome
 
 import android.animation.ValueAnimator
 import android.app.Activity
+import android.app.AlertDialog
+import android.media.tv.TvContract
+import android.media.tv.TvInputInfo
+import android.media.tv.TvInputManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -214,8 +218,9 @@ class MainActivity : Activity() {
         clp.rightMargin = dp(18)
         clock.gravity = Gravity.CENTER_VERTICAL
         top.addView(clock, clp)
-        top.addView(iconButton(R.drawable.ic_search) { openSearch() })
-        top.addView(iconButton(R.drawable.ic_apps) { startActivity(Intent(this, AppsActivity::class.java)) })
+        // Igual ao modelo: Entradas (HDMI), Wi-Fi e Configurações
+        top.addView(iconButton(R.drawable.ic_input) { openInputs() })
+        top.addView(iconButton(R.drawable.ic_wifi) { openWifi() })
         top.addView(iconButton(R.drawable.ic_tune) { open(Intent(Settings.ACTION_SETTINGS)) })
         content.addView(top, LinearLayout.LayoutParams(MATCH, WRAP))
 
@@ -696,6 +701,62 @@ class MainActivity : Activity() {
     }
 
     // ---------- ações ----------
+
+    /** Lista as entradas da TV (HDMI, AV, TV) e troca para a escolhida. */
+    private fun openInputs() {
+        val tim = getSystemService(Context.TV_INPUT_SERVICE) as? TvInputManager
+        val inputs: List<TvInputInfo> = try {
+            tim?.tvInputList.orEmpty().filter { !it.isHidden(this) }
+        } catch (_: Throwable) {
+            emptyList()
+        }
+        if (inputs.isEmpty()) {
+            openLiveTv()
+            return
+        }
+        val labels = inputs.map { info ->
+            val custom = try { info.loadCustomLabel(this)?.toString() } catch (_: Throwable) { null }
+            if (!custom.isNullOrBlank()) custom else info.loadLabel(this).toString()
+        }
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Entradas")
+            .setItems(labels.toTypedArray()) { _, which -> switchInput(inputs[which]) }
+            .show()
+    }
+
+    private fun switchInput(info: TvInputInfo) {
+        if (!info.isPassthroughInput) {
+            openLiveTv()
+            return
+        }
+        try {
+            val uri = TvContract.buildChannelUriForPassthroughInput(info.id)
+            startActivity(Intent(Intent.ACTION_VIEW, uri).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: Throwable) {
+            openLiveTv()
+        }
+    }
+
+    /** Abre o app de TV da própria televisão (canais e entradas). */
+    private fun openLiveTv() {
+        val pkgs = listOf("com.tcl.tv", "com.google.android.tv", "com.android.tv", "com.tcl.tvinput")
+        for (p in pkgs) {
+            val i = packageManager.getLeanbackLaunchIntentForPackage(p)
+                ?: packageManager.getLaunchIntentForPackage(p)
+                ?: continue
+            open(i)
+            return
+        }
+        toast("Use o botão de Entrada (Input) do controle")
+    }
+
+    private fun openWifi() {
+        try {
+            startActivity(Intent(Settings.ACTION_WIFI_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: Throwable) {
+            open(Intent(Settings.ACTION_SETTINGS))
+        }
+    }
 
     private fun openSearch() {
         for (action in listOf(Intent.ACTION_ASSIST, "android.search.action.GLOBAL_SEARCH")) {
