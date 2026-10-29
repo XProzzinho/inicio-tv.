@@ -46,6 +46,7 @@ class MainActivity : Activity() {
     private lateinit var statusText: TextView
     private lateinit var dockRow: LinearLayout
     private lateinit var clock: TextView
+    private lateinit var weatherText: TextView
     private val tabs = ArrayList<TextView>()
 
     private val handler = Handler(Looper.getMainLooper())
@@ -65,6 +66,7 @@ class MainActivity : Activity() {
     private val tick = object : Runnable {
         override fun run() {
             clock.text = timeFmt.format(Date())
+            Weather.now { t -> weatherText.text = t ?: "" }
             handler.postDelayed(this, 10_000)
         }
     }
@@ -209,15 +211,29 @@ class MainActivity : Activity() {
         left.addView(tabRow)
         top.addView(left, LinearLayout.LayoutParams(0, WRAP, 1f))
 
-        clock = TextView(this).apply {
-            textSize = 22f
-            setTextColor(INK)
-            typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+        // Relógio grande com o clima de Pirapora embaixo
+        val clockCol = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.END
         }
-        val clp = LinearLayout.LayoutParams(WRAP, dp(48))
-        clp.rightMargin = dp(18)
-        clock.gravity = Gravity.CENTER_VERTICAL
-        top.addView(clock, clp)
+        clock = TextView(this).apply {
+            textSize = 52f
+            setTextColor(INK)
+            typeface = Typeface.create("sans-serif-thin", Typeface.NORMAL)
+            includeFontPadding = false
+            gravity = Gravity.END
+        }
+        weatherText = TextView(this).apply {
+            textSize = 16f
+            setTextColor(GRAY)
+            gravity = Gravity.END
+            setPadding(0, dp(4), dp(2), 0)
+        }
+        clockCol.addView(clock, LinearLayout.LayoutParams(WRAP, WRAP))
+        clockCol.addView(weatherText, LinearLayout.LayoutParams(WRAP, WRAP))
+        val clp = LinearLayout.LayoutParams(WRAP, WRAP)
+        clp.rightMargin = dp(22)
+        top.addView(clockCol, clp)
         // Igual ao modelo: Entradas (HDMI), Wi-Fi e Configurações
         top.addView(iconButton(R.drawable.ic_input) { openInputs() })
         top.addView(iconButton(R.drawable.ic_wifi) { openWifi() })
