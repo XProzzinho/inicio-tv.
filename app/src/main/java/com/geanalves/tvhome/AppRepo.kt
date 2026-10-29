@@ -85,6 +85,13 @@ class Prefs(ctx: Context) {
         sp.edit().putString("nome_$i", nome.trim().ifBlank { NOMES_PADRAO[i] }).apply()
     }
 
+    /** Avatar desenhado do perfil (0 a 14) ou -1 para mostrar a inicial do nome. */
+    fun avatar(i: Int): Int = sp.getInt("avatar_$i", -1)
+
+    fun setAvatar(i: Int, a: Int) {
+        sp.edit().putInt("avatar_$i", a).apply()
+    }
+
     /** Cada perfil tem seus próprios favoritos (o perfil 1 usa a chave antiga). */
     private val favKey: String get() = if (perfil == 0) "favs" else "favs_$perfil"
 

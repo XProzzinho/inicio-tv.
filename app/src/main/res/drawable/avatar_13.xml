@@ -1,0 +1,21 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="100dp" android:height="100dp" android:viewportWidth="100" android:viewportHeight="100">
+    <group>
+        <clip-path android:pathData="M0,50a50,50 0 1,0 100,0a50,50 0 1,0 -100,0z"/>
+        <path android:fillColor="#D8F5D0" android:pathData="M0,0h100v100h-100z"/>
+        <path android:fillColor="#3E9E52" android:pathData="M30,38l5,-12l6,10l5,-13l5,13l6,-11l4,13z"/>
+        <path android:fillColor="#5CC56E" android:pathData="M20,58a30,28 0 1,0 60,0a30,28 0 1,0 -60,0z"/>
+        <path android:fillColor="#A8E6A0" android:pathData="M32,70a18,10 0 1,0 36,0a18,10 0 1,0 -36,0z"/>
+        <path android:fillColor="#2A2230" android:pathData="M34.2,52a3.8,4.8 0 1,0 7.6,0a3.8,4.8 0 1,0 -7.6,0z"/>
+        <path android:fillColor="#FFFFFF" android:pathData="M37.9,50.3a1.4,1.4 0 1,0 2.8,0a1.4,1.4 0 1,0 -2.8,0z"/>
+        <path android:fillColor="#FFFFFF" android:pathData="M36.3,53.8a0.7,0.7 0 1,0 1.4,0a0.7,0.7 0 1,0 -1.4,0z"/>
+        <path android:fillColor="#2A2230" android:pathData="M58.2,52a3.8,4.8 0 1,0 7.6,0a3.8,4.8 0 1,0 -7.6,0z"/>
+        <path android:fillColor="#FFFFFF" android:pathData="M61.9,50.3a1.4,1.4 0 1,0 2.8,0a1.4,1.4 0 1,0 -2.8,0z"/>
+        <path android:fillColor="#FFFFFF" android:pathData="M60.3,53.8a0.7,0.7 0 1,0 1.4,0a0.7,0.7 0 1,0 -1.4,0z"/>
+        <path android:fillColor="#FF7F9F" android:fillAlpha="0.45" android:pathData="M27.4,62a3.6,2.2 0 1,0 7.2,0a3.6,2.2 0 1,0 -7.2,0z"/>
+        <path android:fillColor="#FF7F9F" android:fillAlpha="0.45" android:pathData="M65.4,62a3.6,2.2 0 1,0 7.2,0a3.6,2.2 0 1,0 -7.2,0z"/>
+        <path android:fillColor="#2E6B3A" android:pathData="M43.7,68a1.3,1.3 0 1,0 2.6,0a1.3,1.3 0 1,0 -2.6,0z"/>
+        <path android:fillColor="#2E6B3A" android:pathData="M53.7,68a1.3,1.3 0 1,0 2.6,0a1.3,1.3 0 1,0 -2.6,0z"/>
+        <path android:strokeColor="#2E6B3A" android:strokeWidth="2.2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M42,75Q50,80 58,75"/>
+    </group>
+</vector>

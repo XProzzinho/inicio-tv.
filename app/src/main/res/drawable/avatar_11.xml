@@ -1,0 +1,21 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="100dp" android:height="100dp" android:viewportWidth="100" android:viewportHeight="100">
+    <group>
+        <clip-path android:pathData="M0,50a50,50 0 1,0 100,0a50,50 0 1,0 -100,0z"/>
+        <path android:fillColor="#E9DCCB" android:pathData="M0,0h100v100h-100z"/>
+        <path android:fillColor="#9C6B45" android:pathData="M16,30a11,11 0 1,0 22,0a11,11 0 1,0 -22,0z"/>
+        <path android:fillColor="#9C6B45" android:pathData="M62,30a11,11 0 1,0 22,0a11,11 0 1,0 -22,0z"/>
+        <path android:fillColor="#9C6B45" android:pathData="M20,56a30,27 0 1,0 60,0a30,27 0 1,0 -60,0z"/>
+        <path android:fillColor="#E8C9A8" android:pathData="M37,66a13,9.5 0 1,0 26,0a13,9.5 0 1,0 -26,0z"/>
+        <path android:fillColor="#2A2230" android:pathData="M35.4,54a2.6,2.6 0 1,0 5.2,0a2.6,2.6 0 1,0 -5.2,0z"/>
+        <path android:fillColor="#FFFFFF" android:pathData="M38.1,53.1a0.8,0.8 0 1,0 1.6,0a0.8,0.8 0 1,0 -1.6,0z"/>
+        <path android:fillColor="#2A2230" android:pathData="M59.4,54a2.6,2.6 0 1,0 5.2,0a2.6,2.6 0 1,0 -5.2,0z"/>
+        <path android:fillColor="#FFFFFF" android:pathData="M62.1,53.1a0.8,0.8 0 1,0 1.6,0a0.8,0.8 0 1,0 -1.6,0z"/>
+        <path android:fillColor="#FF7F9F" android:fillAlpha="0.45" android:pathData="M27.4,63a3.6,2.2 0 1,0 7.2,0a3.6,2.2 0 1,0 -7.2,0z"/>
+        <path android:fillColor="#FF7F9F" android:fillAlpha="0.45" android:pathData="M65.4,63a3.6,2.2 0 1,0 7.2,0a3.6,2.2 0 1,0 -7.2,0z"/>
+        <path android:fillColor="#3A2A30" android:pathData="M46.6,62a3.4,2.4 0 1,0 6.8,0a3.4,2.4 0 1,0 -6.8,0z"/>
+        <path android:strokeColor="#3A2A30" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round" android:pathData="M45,67Q47.5,70 50,67Q52.5,70 55,67"/>
+        <path android:fillColor="#D9A77E" android:pathData="M21.5,30a5.5,5.5 0 1,0 11.0,0a5.5,5.5 0 1,0 -11.0,0z"/>
+        <path android:fillColor="#D9A77E" android:pathData="M67.5,30a5.5,5.5 0 1,0 11.0,0a5.5,5.5 0 1,0 -11.0,0z"/>
+    </group>
+</vector>

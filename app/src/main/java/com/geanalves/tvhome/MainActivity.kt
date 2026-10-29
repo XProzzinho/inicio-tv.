@@ -848,8 +848,15 @@ class MainActivity : Activity() {
     private fun refreshProfile() {
         val i = prefs.perfil
         val nome = prefs.nome(i)
-        avatarText.text = nome.trim().take(1).uppercase(ptBr)
-        avatarBg.setColor(Prefs.CORES_PERFIL[i])
+        val av = prefs.avatar(i)
+        if (av in AVATARES.indices) {
+            avatarText.text = ""
+            avatarText.background = getDrawable(AVATARES[av])
+        } else {
+            avatarText.text = nome.trim().take(1).uppercase(ptBr)
+            avatarBg.setColor(Prefs.CORES_PERFIL[i])
+            avatarText.background = avatarBg
+        }
         greeting.text = saudacao()
     }
 
@@ -902,16 +909,20 @@ class MainActivity : Activity() {
     }
 
     /** Bolinha colorida com a inicial do nome. */
-    private fun avatarCircle(i: Int, sizeDp: Int, textSp: Float): TextView =
+    private fun avatarCircle(i: Int, sizeDp: Int, textSp: Float, avatar: Int = prefs.avatar(i)): TextView =
         TextView(this).apply {
-            text = prefs.nome(i).trim().take(1).uppercase(ptBr)
+            text = if (avatar in AVATARES.indices) "" else prefs.nome(i).trim().take(1).uppercase(ptBr)
             textSize = textSp
             setTextColor(Color.WHITE)
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            background = GradientDrawable().apply {
-                shape = GradientDrawable.OVAL
-                setColor(Prefs.CORES_PERFIL[i])
+            background = if (avatar in AVATARES.indices) {
+                getDrawable(AVATARES[avatar])
+            } else {
+                GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(Prefs.CORES_PERFIL[i])
+                }
             }
             layoutParams = FrameLayout.LayoutParams(dp(sizeDp), dp(sizeDp), Gravity.CENTER)
         }
@@ -982,34 +993,106 @@ class MainActivity : Activity() {
         focusMe?.post { focusMe?.requestFocus() }
     }
 
-    /** Editar perfil: só o nome, numa janela branca. */
+    /** Editar perfil: nome e avatar, numa janela branca. */
     private fun renameProfile(i: Int) {
+        var escolhido = prefs.avatar(i)
         val (d, box) = whiteDialog()
+        box.setPadding(dp(40), dp(22), dp(40), dp(20))
         box.addView(dialogTitle("Editar perfil"))
-        val holder = FrameLayout(this).apply { setPadding(0, dp(20), 0, dp(16)) }
-        holder.addView(avatarCircle(i, 64, 26f))
-        box.addView(holder, LinearLayout.LayoutParams(WRAP, WRAP))
+        val preview = FrameLayout(this).apply { setPadding(0, dp(12), 0, dp(10)) }
+        fun showPreview() {
+            preview.removeAllViews()
+            preview.addView(avatarCircle(i, 52, 22f, escolhido))
+        }
+        showPreview()
+        box.addView(preview, LinearLayout.LayoutParams(WRAP, WRAP))
         val input = android.widget.EditText(this).apply {
             setText(prefs.nome(i))
             setSelectAllOnFocus(true)
             setSingleLine()
-            textSize = 18f
+            textSize = 17f
             setTextColor(PRETO)
             setHintTextColor(0xFF8E8E93.toInt())
             hint = "Nome"
             gravity = Gravity.CENTER
             background = rounded(0xFFF2F2F7.toInt(), 14)
-            setPadding(dp(16), dp(12), dp(16), dp(12))
+            setPadding(dp(16), dp(9), dp(16), dp(9))
         }
         box.addView(input, LinearLayout.LayoutParams(dp(300), WRAP))
+
+        // Grade de avatares: Feminino, Masculino, Infantil
+        val rings = ArrayList<GradientDrawable>()
+        fun ringColor(idx: Int, focused: Boolean): Int = when {
+            focused -> PRETO
+            idx == escolhido -> 0xFFC7C7CC.toInt()
+            else -> Color.TRANSPARENT
+        }
+        val grid = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(12), 0, 0)
+            clipChildren = false
+            clipToPadding = false
+        }
+        listOf("Feminino", "Masculino", "Infantil").forEachIndexed { r, label ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                clipChildren = false
+                clipToPadding = false
+            }
+            row.addView(
+                TextView(this).apply {
+                    text = label
+                    textSize = 14f
+                    setTextColor(0xFF8E8E93.toInt())
+                },
+                LinearLayout.LayoutParams(dp(88), WRAP),
+            )
+            for (c in 0 until 5) {
+                val idx = r * 5 + c
+                val ring = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(Color.TRANSPARENT)
+                    setStroke(dp(3), ringColor(idx, false))
+                }
+                rings += ring
+                val cell = FrameLayout(this).apply {
+                    background = ring
+                    isFocusable = true
+                    isClickable = true
+                    setOnClickListener {
+                        escolhido = idx
+                        rings.forEachIndexed { k, g -> g.setStroke(dp(3), ringColor(k, k == idx && hasFocus())) }
+                        showPreview()
+                    }
+                    setOnFocusChangeListener { v, has ->
+                        ring.setStroke(dp(3), ringColor(idx, has))
+                        v.animate().scaleX(if (has) 1.12f else 1f).scaleY(if (has) 1.12f else 1f).setDuration(120).start()
+                    }
+                }
+                cell.addView(
+                    ImageView(this).apply { setImageResource(AVATARES[idx]) },
+                    FrameLayout.LayoutParams(dp(40), dp(40), Gravity.CENTER),
+                )
+                val lp = LinearLayout.LayoutParams(dp(48), dp(48))
+                lp.leftMargin = dp(6)
+                lp.topMargin = dp(3)
+                lp.bottomMargin = dp(3)
+                row.addView(cell, lp)
+            }
+            grid.addView(row)
+        }
+        box.addView(grid)
+
         val buttons = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(0, dp(22), 0, 0)
+            setPadding(0, dp(14), 0, 0)
         }
         buttons.addView(pill("Cancelar") { d.dismiss() })
         val save = pill("Salvar") {
             prefs.setNome(i, input.text.toString())
+            prefs.setAvatar(i, escolhido)
             refreshProfile()
             d.dismiss()
         }
@@ -1263,6 +1346,12 @@ class MainActivity : Activity() {
         private val INK: Int get() = Cores.tinta
         private val GRAY: Int get() = Cores.cinza
         private const val PRETO = 0xFF1C1C1E.toInt()
+        /** Os 15 avatares desenhados: 0-4 feminino, 5-9 masculino, 10-14 infantil */
+        private val AVATARES = intArrayOf(
+            R.drawable.avatar_00, R.drawable.avatar_01, R.drawable.avatar_02, R.drawable.avatar_03, R.drawable.avatar_04,
+            R.drawable.avatar_05, R.drawable.avatar_06, R.drawable.avatar_07, R.drawable.avatar_08, R.drawable.avatar_09,
+            R.drawable.avatar_10, R.drawable.avatar_11, R.drawable.avatar_12, R.drawable.avatar_13, R.drawable.avatar_14,
+        )
         private const val DOCK_APPS = 7
         private const val DOCK_GAP = 12
         /** Tempo parado até o descanso de tela (3 minutos) */
