@@ -1021,17 +1021,74 @@ class MainActivity : Activity() {
         input.post { input.requestFocus() }
     }
 
+    /** Previsão da semana numa janela branca, com ícone do tempo em cada dia. */
     private fun showForecast() {
-        Weather.week { lines ->
-            if (lines.isEmpty()) {
+        Weather.week { dias ->
+            if (dias.isEmpty()) {
                 toast("Não deu para pegar a previsão agora")
-            } else {
-                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                    .setTitle("Previsão · Pirapora (MG)")
-                    .setItems(lines.toTypedArray(), null)
-                    .setPositiveButton("Fechar", null)
-                    .show()
+                return@week
             }
+            val (d, box) = whiteDialog()
+            box.addView(dialogTitle("Previsão · Pirapora (MG)"))
+            val list = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(0, dp(16), 0, dp(18))
+            }
+            dias.forEachIndexed { i, dia ->
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dp(6), dp(5), dp(6), dp(5))
+                }
+                row.addView(
+                    TextView(this).apply {
+                        text = dia.label
+                        textSize = 16f
+                        setTextColor(PRETO)
+                        typeface = if (i == 0) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+                    },
+                    LinearLayout.LayoutParams(dp(84), WRAP),
+                )
+                row.addView(
+                    ImageView(this).apply { setImageResource(Weather.icon(dia.code)) },
+                    LinearLayout.LayoutParams(dp(32), dp(32)),
+                )
+                row.addView(
+                    TextView(this).apply {
+                        text = dia.desc
+                        textSize = 15f
+                        setTextColor(0xFF8E8E93.toInt())
+                        setPadding(dp(14), 0, dp(14), 0)
+                        maxLines = 1
+                    },
+                    LinearLayout.LayoutParams(dp(190), WRAP),
+                )
+                row.addView(
+                    TextView(this).apply {
+                        text = "${dia.max}°"
+                        textSize = 16f
+                        setTextColor(PRETO)
+                        typeface = Typeface.DEFAULT_BOLD
+                        gravity = Gravity.END
+                    },
+                    LinearLayout.LayoutParams(dp(44), WRAP),
+                )
+                row.addView(
+                    TextView(this).apply {
+                        text = "${dia.min}°"
+                        textSize = 16f
+                        setTextColor(0xFF8E8E93.toInt())
+                        gravity = Gravity.END
+                    },
+                    LinearLayout.LayoutParams(dp(44), WRAP),
+                )
+                list.addView(row)
+            }
+            box.addView(list)
+            val close = pill("Fechar") { d.dismiss() }
+            box.addView(close)
+            d.show()
+            close.post { close.requestFocus() }
         }
     }
 

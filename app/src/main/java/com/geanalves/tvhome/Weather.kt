@@ -56,8 +56,10 @@ object Weather {
         "&daily=weather_code,temperature_2m_max,temperature_2m_min" +
         "&forecast_days=7&timezone=America%2FSao_Paulo"
 
-    /** Previsão de 7 dias: "Qui, 29 · 33° / 21° · Céu limpo". Lista vazia se não conseguir. */
-    fun week(cb: (List<String>) -> Unit) {
+    data class Dia(val label: String, val max: Int, val min: Int, val code: Int, val desc: String)
+
+    /** Previsão de 7 dias. Lista vazia se não conseguir. */
+    fun week(cb: (List<Dia>) -> Unit) {
         Thread {
             val lines = try {
                 val c = URL(URL_WEEK).openConnection() as HttpURLConnection
@@ -80,15 +82,27 @@ object Weather {
                     val dia = if (i == 0) "Hoje" else outFmt.format(date!!)
                         .replace(".", "")
                         .replaceFirstChar { it.uppercase() }
-                    val hi = max.getDouble(i).roundToInt()
-                    val lo = min.getDouble(i).roundToInt()
-                    "$dia  ·  $hi° / $lo°  ·  ${describe(codes.optInt(i, -1))}"
+                    val code = codes.optInt(i, -1)
+                    Dia(dia, max.getDouble(i).roundToInt(), min.getDouble(i).roundToInt(), code, describe(code))
                 }
             } catch (_: Throwable) {
                 emptyList()
             }
             main.post { cb(lines) }
         }.start()
+    }
+
+    /** Ícone colorido para cada tipo de tempo. */
+    fun icon(code: Int): Int = when (code) {
+        0 -> R.drawable.tempo_sol
+        1, 2 -> R.drawable.tempo_parcial
+        3 -> R.drawable.tempo_nublado
+        45, 48 -> R.drawable.tempo_neblina
+        51, 53, 55, 56, 57 -> R.drawable.tempo_garoa
+        61, 63, 65, 66, 67, 80, 81, 82 -> R.drawable.tempo_chuva
+        71, 73, 75, 77, 85, 86 -> R.drawable.tempo_neve
+        95, 96, 99 -> R.drawable.tempo_trovoada
+        else -> R.drawable.tempo_parcial
     }
 
     private fun describe(code: Int): String = when (code) {
