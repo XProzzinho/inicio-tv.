@@ -169,7 +169,7 @@ object Tmdb {
 
     /** Desfoque barato: reduz muito a imagem e deixa a tela ampliar suavizando. */
     fun blur(b: Bitmap): Bitmap {
-        val w = 36
+        val w = 72
         val h = (w * b.height / b.width.coerceAtLeast(1)).coerceAtLeast(1)
         return Bitmap.createScaledBitmap(b, w, h, true)
     }

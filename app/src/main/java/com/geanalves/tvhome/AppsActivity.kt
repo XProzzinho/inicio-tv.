@@ -418,6 +418,7 @@ class AppsActivity : Activity() {
     private fun open(i: Intent) {
         try {
             startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            i.component?.packageName?.let { if (it != "com.android.settings") prefs.marcarUso(it) }
         } catch (t: Throwable) {
             Toast.makeText(this, "Não deu para abrir esse app", Toast.LENGTH_SHORT).show()
         }

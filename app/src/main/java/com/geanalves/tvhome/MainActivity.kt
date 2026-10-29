@@ -288,7 +288,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, dp(6), 0, 0)
         }
-        listOf("Explorar", "Filmes", "Séries").forEachIndexed { i, s ->
+        listOf("Explorar", "Filmes", "Séries", "Continuar").forEachIndexed { i, s ->
             val t = makeTab(s, i)
             tabs += t
             val lp = LinearLayout.LayoutParams(WRAP, WRAP)
@@ -329,7 +329,8 @@ class MainActivity : Activity() {
         val clp = LinearLayout.LayoutParams(WRAP, WRAP)
         clp.rightMargin = dp(8)
         top.addView(clockCol, clp)
-        // Só o botão de Configurações
+        // Entradas (HDMI) e Configurações
+        top.addView(iconButton(R.drawable.ic_input) { openInputs() })
         top.addView(iconButton(R.drawable.ic_menu) { open(Intent(Settings.ACTION_SETTINGS)) })
         content.addView(top, LinearLayout.LayoutParams(MATCH, WRAP))
 
@@ -463,6 +464,11 @@ class MainActivity : Activity() {
 
     private fun loadCards(force: Boolean = false) {
         val token = ++loadToken
+        if (currentTab == TAB_CONTINUAR) {
+            val recentes = recentCards()
+            showCards(recentes, if (recentes.isEmpty()) "Os apps que você abrir vão aparecer aqui" else null)
+            return
+        }
         if (!Tmdb.enabled) {
             showCards(fallbackCards(), null)
             return
@@ -476,6 +482,15 @@ class MainActivity : Activity() {
                 showCards(items.map { Card(it.title, it, null) }, null)
             }
         }
+    }
+
+    /** Apps usados por último neste perfil. */
+    private fun recentCards(): List<Card> {
+        val byPkg = AppRepo.load(this).associateBy { it.pkg }
+        val hidden = prefs.hidden
+        return prefs.recentes.mapNotNull { byPkg[it] }
+            .filter { it.pkg !in hidden }
+            .map { Card(it.label, null, it) }
     }
 
     private fun fallbackCards(): List<Card> {
@@ -660,8 +675,8 @@ class MainActivity : Activity() {
             return
         }
         bgImage.setImageBitmap(Tmdb.blur(b))
-        bgImage.alpha = 0.25f
-        bgImage.animate().alpha(0.7f).setDuration(350).start()
+        bgImage.alpha = 0.35f
+        bgImage.animate().alpha(0.95f).setDuration(450).start()
     }
 
     private fun openCard(c: Card) {
@@ -1277,10 +1292,26 @@ class MainActivity : Activity() {
             val custom = try { info.loadCustomLabel(this)?.toString() } catch (_: Throwable) { null }
             if (!custom.isNullOrBlank()) custom else info.loadLabel(this).toString()
         }
-        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("Entradas")
-            .setItems(labels.toTypedArray()) { _, which -> switchInput(inputs[which]) }
-            .show()
+        val (d, box) = whiteDialog()
+        box.addView(dialogTitle("Entradas"))
+        val list = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(12), 0, dp(4))
+        }
+        var first: View? = null
+        inputs.forEachIndexed { k, info ->
+            val p = pill(labels[k]) {
+                d.dismiss()
+                switchInput(info)
+            }
+            val lp = LinearLayout.LayoutParams(dp(260), WRAP)
+            lp.topMargin = dp(8)
+            list.addView(p, lp)
+            if (first == null) first = p
+        }
+        box.addView(list)
+        d.show()
+        first?.post { first?.requestFocus() }
     }
 
     private fun switchInput(info: TvInputInfo) {
@@ -1331,6 +1362,7 @@ class MainActivity : Activity() {
     private fun open(i: Intent) {
         try {
             startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            i.component?.packageName?.let { if (it != "com.android.settings") prefs.marcarUso(it) }
         } catch (t: Throwable) {
             toast("Não deu para abrir esse app")
         }
@@ -1346,6 +1378,7 @@ class MainActivity : Activity() {
         private val INK: Int get() = Cores.tinta
         private val GRAY: Int get() = Cores.cinza
         private const val PRETO = 0xFF1C1C1E.toInt()
+        private const val TAB_CONTINUAR = 3
         /** Os 15 avatares desenhados: 0-4 feminino, 5-9 masculino, 10-14 infantil */
         private val AVATARES = intArrayOf(
             R.drawable.avatar_00, R.drawable.avatar_01, R.drawable.avatar_02, R.drawable.avatar_03, R.drawable.avatar_04,

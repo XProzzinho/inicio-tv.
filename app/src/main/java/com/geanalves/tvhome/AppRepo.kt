@@ -92,6 +92,15 @@ class Prefs(ctx: Context) {
         sp.edit().putInt("avatar_$i", a).apply()
     }
 
+    /** Apps abertos por último (mais recente primeiro), um histórico por perfil. */
+    val recentes: List<String>
+        get() = sp.getString("recentes_$perfil", null)?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+
+    fun marcarUso(pkg: String) {
+        val l = listOf(pkg) + (recentes - pkg)
+        sp.edit().putString("recentes_$perfil", l.take(12).joinToString(",")).apply()
+    }
+
     /** Cada perfil tem seus próprios favoritos (o perfil 1 usa a chave antiga). */
     private val favKey: String get() = if (perfil == 0) "favs" else "favs_$perfil"
 

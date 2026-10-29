@@ -38,7 +38,7 @@ object Cores {
         get() = if (escuro) {
             intArrayOf(0xB31E1E24.toInt(), 0x661E1E24, 0xE00B0B0F.toInt())
         } else {
-            intArrayOf(0xB3F7F4F0.toInt(), 0x66F7F4F0, 0xD9F2EEEA.toInt())
+            intArrayOf(0x99F7F4F0.toInt(), 0x40F7F4F0, 0xD9F2EEEA.toInt())
         }
 
     // Peças
