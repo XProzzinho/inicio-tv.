@@ -70,10 +70,28 @@ object AppRepo {
 class Prefs(ctx: Context) {
     private val sp = ctx.getSharedPreferences("inicio", Context.MODE_PRIVATE)
 
-    var favs: List<String>
-        get() = sp.getString("favs", null)?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+    // ---------- perfis (3) ----------
+
+    /** Perfil em uso: 0, 1 ou 2. */
+    var perfil: Int
+        get() = sp.getInt("perfil", 0).coerceIn(0, PERFIS - 1)
         set(v) {
-            sp.edit().putString("favs", v.joinToString(",")).apply()
+            sp.edit().putInt("perfil", v.coerceIn(0, PERFIS - 1)).apply()
+        }
+
+    fun nome(i: Int): String = sp.getString("nome_$i", null) ?: NOMES_PADRAO[i]
+
+    fun setNome(i: Int, nome: String) {
+        sp.edit().putString("nome_$i", nome.trim().ifBlank { NOMES_PADRAO[i] }).apply()
+    }
+
+    /** Cada perfil tem seus próprios favoritos (o perfil 1 usa a chave antiga). */
+    private val favKey: String get() = if (perfil == 0) "favs" else "favs_$perfil"
+
+    var favs: List<String>
+        get() = sp.getString(favKey, null)?.split(",")?.filter { it.isNotBlank() } ?: emptyList()
+        set(v) {
+            sp.edit().putString(favKey, v.joinToString(",")).apply()
         }
 
     val hidden: Set<String>
@@ -107,7 +125,7 @@ class Prefs(ctx: Context) {
 
     /** Na primeira vez, já coloca os apps de streaming mais comuns nos favoritos. */
     fun ensureDefaults(apps: List<AppEntry>) {
-        if (sp.contains("favs")) return
+        if (sp.contains(favKey)) return
         val installed = apps.map { it.pkg }.toSet()
         val known = listOf(
             "com.netflix.ninja",
@@ -123,5 +141,11 @@ class Prefs(ctx: Context) {
         var f = known.filter { it in installed }
         if (f.isEmpty()) f = apps.take(5).map { it.pkg }
         favs = f
+    }
+
+    companion object {
+        const val PERFIS = 3
+        val NOMES_PADRAO = listOf("Geanderson", "Perfil 2", "Perfil 3")
+        val CORES_PERFIL = intArrayOf(0xFF3B82F6.toInt(), 0xFFE0559A.toInt(), 0xFF22A06B.toInt())
     }
 }

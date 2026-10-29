@@ -49,6 +49,8 @@ class MainActivity : Activity() {
     private lateinit var clock: TextView
     private lateinit var weatherText: TextView
     private lateinit var greeting: TextView
+    private lateinit var avatarText: TextView
+    private lateinit var avatarBg: GradientDrawable
     private lateinit var saver: FrameLayout
     private lateinit var saverImg: ImageView
     private lateinit var saverClock: TextView
@@ -127,6 +129,7 @@ class MainActivity : Activity() {
             addDataScheme("package")
         }
         registerReceiver(packageReceiver, filter)
+        refreshProfile()
         buildDock()
         selectTab(0)
     }
@@ -239,13 +242,40 @@ class MainActivity : Activity() {
             gravity = Gravity.TOP
         }
         val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        // Perfil (bolinha com a inicial) + saudação
+        val profileRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(0, 0, 0, dp(4))
+        }
+        avatarBg = GradientDrawable().apply { shape = GradientDrawable.OVAL }
+        val avatarRing = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(Color.TRANSPARENT)
+            setStroke(dp(3), INK)
+        }
+        avatarText = TextView(this).apply {
+            background = avatarBg
+            gravity = Gravity.CENTER
+            textSize = 16f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            isFocusable = true
+            isClickable = true
+            setOnClickListener { showProfiles() }
+            setOnFocusChangeListener { v, has ->
+                v.foreground = if (has) avatarRing else null
+                v.animate().scaleX(if (has) 1.15f else 1f).scaleY(if (has) 1.15f else 1f).setDuration(120).start()
+            }
+        }
+        profileRow.addView(avatarText, LinearLayout.LayoutParams(dp(36), dp(36)))
         greeting = TextView(this).apply {
-            text = saudacao()
             textSize = 18f
             setTextColor(GRAY)
-            setPadding(dp(2), 0, 0, dp(2))
+            setPadding(dp(12), 0, 0, 0)
         }
-        left.addView(greeting)
+        profileRow.addView(greeting)
+        left.addView(profileRow)
         left.addView(
             TextView(this).apply {
                 text = "Para você"
@@ -443,7 +473,7 @@ class MainActivity : Activity() {
             if (items.isEmpty()) {
                 showCards(fallbackCards(), "Sem conexão com o TMDB agora · mostrando seus apps")
             } else {
-                showCards(items.take(DESTAQUES).map { Card(it.title, it, null) }, null)
+                showCards(items.map { Card(it.title, it, null) }, null)
             }
         }
     }
@@ -466,6 +496,8 @@ class MainActivity : Activity() {
     private fun showCards(cards: List<Card>, note: String?) {
         showingFallback = cards.any { it.app != null }
         fixedLayout = !showingFallback
+        // Sem espaço em branco no fim da fileira de filmes
+        cardsRow.setPadding(0, dp(26), if (fixedLayout) dp(8) else resources.displayMetrics.widthPixels, dp(8))
         status(note)
         val focusWasHere = cardsRow.hasFocus()
         cardsRow.removeAllViews()
@@ -676,10 +708,19 @@ class MainActivity : Activity() {
         if (focusedPkg != null) dockRow.findViewWithTag<View>(focusedPkg)?.requestFocus()
     }
 
+    /** Tamanho dos blocos do dock: 7 apps + "Todos" cabem sem rolar. */
+    private fun dockSize(): Pair<Int, Int> {
+        val gap = dp(DOCK_GAP)
+        val avail = resources.displayMetrics.widthPixels - dp(112) - dp(32) - dp(16)
+        val w = ((avail - gap * DOCK_APPS) / (DOCK_APPS + 9f / 16f)).toInt()
+        val h = w * 9 / 16
+        return w to h
+    }
+
     private fun dockLp(): LinearLayout.LayoutParams {
-        val h = (resources.displayMetrics.heightPixels * 0.13f).toInt()
-        val lp = LinearLayout.LayoutParams(h * 16 / 9, h)
-        lp.rightMargin = dp(18)
+        val (w, h) = dockSize()
+        val lp = LinearLayout.LayoutParams(w, h)
+        lp.rightMargin = dp(DOCK_GAP)
         return lp
     }
 
@@ -759,12 +800,12 @@ class MainActivity : Activity() {
                 setImageResource(R.drawable.ic_apps)
                 setColorFilter(INK)
             },
-            LinearLayout.LayoutParams(dp(24), dp(24)),
+            LinearLayout.LayoutParams(dp(20), dp(20)),
         )
         col.addView(
             TextView(this).apply {
-                text = "Todos os apps"
-                textSize = 11f
+                text = "Todos"
+                textSize = 10f
                 setTextColor(INK)
                 gravity = Gravity.CENTER
                 setPadding(0, dp(4), 0, 0)
@@ -772,7 +813,8 @@ class MainActivity : Activity() {
         )
         card.addView(col, FrameLayout.LayoutParams(MATCH, MATCH))
         styleDockFocus(card)
-        card.layoutParams = dockLp()
+        val h = dockSize().second
+        card.layoutParams = LinearLayout.LayoutParams(h, h)
         return card
     }
 
@@ -800,7 +842,54 @@ class MainActivity : Activity() {
             h < 18 -> "Boa tarde"
             else -> "Boa noite"
         }
-        return "$p, $NOME"
+        return "$p, ${prefs.nome(prefs.perfil)}"
+    }
+
+    private fun refreshProfile() {
+        val i = prefs.perfil
+        val nome = prefs.nome(i)
+        avatarText.text = nome.trim().take(1).uppercase(ptBr)
+        avatarBg.setColor(Prefs.CORES_PERFIL[i])
+        greeting.text = saudacao()
+    }
+
+    /** Trocar de perfil ou mudar o nome do perfil atual. */
+    private fun showProfiles() {
+        val atual = prefs.perfil
+        val itens = (0 until Prefs.PERFIS).map { i ->
+            (if (i == atual) "✓  " else "     ") + prefs.nome(i)
+        } + "Mudar o nome de \"${prefs.nome(atual)}\""
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Quem está assistindo?")
+            .setItems(itens.toTypedArray()) { _, which ->
+                if (which < Prefs.PERFIS) {
+                    prefs.perfil = which
+                    refreshProfile()
+                    refreshApps()
+                } else {
+                    renameProfile(atual)
+                }
+            }
+            .show()
+    }
+
+    private fun renameProfile(i: Int) {
+        val input = android.widget.EditText(this).apply {
+            setText(prefs.nome(i))
+            setSelectAllOnFocus(true)
+            setSingleLine()
+        }
+        val box = FrameLayout(this).apply { setPadding(dp(24), dp(8), dp(24), 0) }
+        box.addView(input)
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Nome do perfil")
+            .setView(box)
+            .setPositiveButton("Salvar") { _, _ ->
+                prefs.setNome(i, input.text.toString())
+                refreshProfile()
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     private fun showForecast() {
@@ -987,7 +1076,8 @@ class MainActivity : Activity() {
         private const val DESTAQUES = 3
         private val INK: Int get() = Cores.tinta
         private val GRAY: Int get() = Cores.cinza
-        private const val NOME = "Geanderson"
+        private const val DOCK_APPS = 7
+        private const val DOCK_GAP = 12
         /** Tempo parado até o descanso de tela (3 minutos) */
         private const val IDLE_MS = 3 * 60_000L
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
