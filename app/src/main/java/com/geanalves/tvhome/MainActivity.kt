@@ -239,9 +239,7 @@ class MainActivity : Activity() {
         val clp = LinearLayout.LayoutParams(WRAP, WRAP)
         clp.rightMargin = dp(22)
         top.addView(clockCol, clp)
-        // Igual ao modelo: Entradas (HDMI), Wi-Fi e Configurações
-        top.addView(iconButton(R.drawable.ic_input) { openInputs() })
-        top.addView(iconButton(R.drawable.ic_wifi) { openWifi() })
+        // Só o botão de Configurações
         top.addView(iconButton(R.drawable.ic_tune) { open(Intent(Settings.ACTION_SETTINGS)) })
         content.addView(top, LinearLayout.LayoutParams(MATCH, WRAP))
 
