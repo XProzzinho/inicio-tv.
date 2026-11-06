@@ -1146,44 +1146,73 @@ class MainActivity : Activity() {
             layoutParams = FrameLayout.LayoutParams(dp(sizeDp), dp(sizeDp), Gravity.CENTER)
         }
 
-    /** Quem está assistindo? Três bolinhas e o botão Editar perfil. */
+    /** Quem está assistindo? Três carinhas grandes e o botão Editar perfil. */
     private fun showProfiles() {
         val atual = prefs.perfil
         val (d, box) = whiteDialog()
+        box.setPadding(dp(56), dp(34), dp(56), dp(30))
+        box.clipChildren = false
+        box.clipToPadding = false
         box.addView(dialogTitle("Quem está assistindo?"))
 
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(0, dp(26), 0, dp(24))
+            setPadding(0, dp(30), 0, dp(26))
             clipChildren = false
             clipToPadding = false
         }
         var focusMe: View? = null
         for (i in 0 until Prefs.PERFIS) {
+            // Anel com folga em volta da carinha: cinza no perfil atual, preto e grosso no selecionado
             val ringBg = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(Color.TRANSPARENT)
-                if (i == atual) setStroke(dp(3), 0xFFD1D1D6.toInt())
+                if (i == atual) setStroke(dp(3), Cores.sutil or 0x33000000)
             }
-            val holder = FrameLayout(this).apply { background = ringBg }
-            holder.addView(avatarCircle(i, 76, 30f))
+            val holder = FrameLayout(this).apply {
+                background = ringBg
+                setPadding(dp(8), dp(8), dp(8), dp(8))
+                clipChildren = false
+            }
+            holder.addView(avatarCircle(i, 100, 38f))
             val name = TextView(this).apply {
                 text = prefs.nome(i)
-                textSize = 16f
-                setTextColor(PRETO)
+                textSize = 17f
+                setTextColor(if (i == atual) PRETO else GRAY)
                 gravity = Gravity.CENTER
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
-                typeface = if (i == atual) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-                setPadding(0, dp(10), 0, 0)
+                typeface = if (i == atual) Typeface.create("sans-serif-medium", Typeface.BOLD) else Typeface.DEFAULT
+                setPadding(0, dp(14), 0, 0)
+            }
+            // Etiqueta embaixo do nome: "Assistindo" no atual, "Criança" no perfil infantil
+            val etiqueta = TextView(this).apply {
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setPadding(dp(10), dp(3), dp(10), dp(3))
+                when {
+                    prefs.crianca(i) -> {
+                        text = "Criança"
+                        setTextColor(Color.WHITE)
+                        background = rounded(0xFFFF9500.toInt(), 12)
+                    }
+                    i == atual -> {
+                        text = "Assistindo"
+                        setTextColor(GRAY)
+                        background = rounded(Cores.campo, 12)
+                    }
+                    else -> visibility = View.INVISIBLE
+                }
             }
             val col = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
                 isFocusable = true
                 isClickable = true
-                setPadding(dp(10), dp(6), dp(10), dp(6))
+                clipChildren = false
+                clipToPadding = false
+                setPadding(dp(12), dp(8), dp(12), dp(8))
                 setOnClickListener {
                     prefs.perfil = i
                     refreshProfile()
@@ -1191,15 +1220,23 @@ class MainActivity : Activity() {
                     d.dismiss()
                 }
                 setOnFocusChangeListener { _, has ->
-                    ringBg.setStroke(dp(3), if (has) PRETO else if (i == atual) 0xFFD1D1D6.toInt() else Color.TRANSPARENT)
-                    holder.animate().scaleX(if (has) 1.1f else 1f).scaleY(if (has) 1.1f else 1f).setDuration(140).start()
+                    ringBg.setStroke(
+                        if (has) dp(5) else dp(3),
+                        if (has) PRETO else if (i == atual) (Cores.sutil or 0x33000000) else Color.TRANSPARENT,
+                    )
+                    name.setTextColor(if (has || i == atual) PRETO else GRAY)
+                    holder.animate().scaleX(if (has) 1.08f else 1f).scaleY(if (has) 1.08f else 1f)
+                        .translationZ(if (has) dpf(6) else 0f).setDuration(160).start()
                 }
             }
-            col.addView(holder, LinearLayout.LayoutParams(dp(88), dp(88)))
-            col.addView(name, LinearLayout.LayoutParams(dp(110), WRAP))
+            col.addView(holder, LinearLayout.LayoutParams(dp(116), dp(116)))
+            col.addView(name, LinearLayout.LayoutParams(dp(150), WRAP))
+            val elp = LinearLayout.LayoutParams(WRAP, WRAP)
+            elp.topMargin = dp(6)
+            col.addView(etiqueta, elp)
             val lp = LinearLayout.LayoutParams(WRAP, WRAP)
-            lp.leftMargin = dp(10)
-            lp.rightMargin = dp(10)
+            lp.leftMargin = dp(8)
+            lp.rightMargin = dp(8)
             row.addView(col, lp)
             if (i == atual) focusMe = col
         }

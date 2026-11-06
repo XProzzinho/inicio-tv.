@@ -86,14 +86,21 @@ class Prefs(ctx: Context) {
             sp.edit().putInt("perfil", v.coerceIn(0, PERFIS - 1)).apply()
         }
 
-    fun nome(i: Int): String = sp.getString("nome_$i", null) ?: NOMES_PADRAO[i]
+    fun nome(i: Int): String {
+        val salvo = sp.getString("nome_$i", null)
+        // Nome antigo de fábrica ("Perfil 2") vira o nome novo
+        return if (salvo == null || salvo == NOMES_ANTIGOS[i]) NOMES_PADRAO[i] else salvo
+    }
+
+    /** Perfil de criança (o do Anthony Miguel). */
+    fun crianca(i: Int): Boolean = sp.getBoolean("crianca_$i", i == 2)
 
     fun setNome(i: Int, nome: String) {
         sp.edit().putString("nome_$i", nome.trim().ifBlank { NOMES_PADRAO[i] }).apply()
     }
 
     /** Avatar desenhado do perfil (0 a 14) ou -1 para mostrar a inicial do nome. */
-    fun avatar(i: Int): Int = sp.getInt("avatar_$i", -1)
+    fun avatar(i: Int): Int = sp.getInt("avatar_$i", AVATAR_PADRAO[i])
 
     fun setAvatar(i: Int, a: Int) {
         sp.edit().putInt("avatar_$i", a).apply()
@@ -174,7 +181,11 @@ class Prefs(ctx: Context) {
         /** Máximo de apps favoritos (os 7 do dock) */
         const val MAX_FAVS = 7
         const val PERFIS = 3
-        val NOMES_PADRAO = listOf("Geanderson", "Perfil 2", "Perfil 3")
+        val NOMES_PADRAO = listOf("Geanderson", "Anny Isabely", "Anthony Miguel")
+        val NOMES_ANTIGOS = listOf("Geanderson", "Perfil 2", "Perfil 3")
+
+        /** Carinha de cada perfil: masculino, feminino e infantil. */
+        val AVATAR_PADRAO = intArrayOf(5, 0, 10)
         val CORES_PERFIL = intArrayOf(0xFF3B82F6.toInt(), 0xFFE0559A.toInt(), 0xFF22A06B.toInt())
     }
 }
