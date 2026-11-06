@@ -48,13 +48,8 @@ class MainActivity : Activity() {
         val title: String,
         val item: Tmdb.Item?,
         val app: AppEntry?,
-        // Filme ou série da sua lista (abas Filmes e Séries); [episodios] = os da mesma série
-        val canal: Iptv.Canal? = null,
-        val episodios: List<Iptv.Canal> = emptyList(),
     )
 
-    /** Cartazes da lista: todos em pé, do mesmo tamanho. */
-    private var cartazes = false
 
     private lateinit var prefs: Prefs
     private lateinit var bgImage: ImageView
@@ -68,42 +63,7 @@ class MainActivity : Activity() {
 
     // ---------- bolinha da TV ao vivo ----------
 
-    private enum class EstadoAoVivo { SEM_LISTA, FUNCIONANDO, ERRO }
-
     private lateinit var aoVivoTab: TextView
-
-    /** Bolinha: vermelha = lista funcionando, laranja = lista com erro, cinza = sem lista. */
-    private fun pintarBolinha(tab: TextView, nome: String, e: EstadoAoVivo) {
-        val cor = when (e) {
-            EstadoAoVivo.FUNCIONANDO -> 0xFFFF3B30.toInt()
-            EstadoAoVivo.ERRO -> 0xFFFF9500.toInt()
-            EstadoAoVivo.SEM_LISTA -> GRAY
-        }
-        val txt = android.text.SpannableString("● $nome")
-        txt.setSpan(android.text.style.ForegroundColorSpan(cor), 0, 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        tab.text = txt
-    }
-
-    private fun pintarAoVivo(e: EstadoAoVivo) {
-        if (::aoVivoTab.isInitialized) pintarBolinha(aoVivoTab, "TV ao vivo", e)
-    }
-
-    private fun conferirLista(l: ListaM3u, tab: () -> TextView?, nome: String) {
-        val t = tab() ?: return
-        if (l.link(this) == null) {
-            pintarBolinha(t, nome, EstadoAoVivo.SEM_LISTA)
-            return
-        }
-        l.carregar(this) { erro ->
-            if (!isFinishing) pintarBolinha(t, nome, if (erro == null) EstadoAoVivo.FUNCIONANDO else EstadoAoVivo.ERRO)
-        }
-    }
-
-    private fun conferirAoVivo() {
-        conferirLista(Iptv.aoVivo, { if (::aoVivoTab.isInitialized) aoVivoTab else null }, "TV ao vivo")
-        // Trocou a lista de filmes e séries pelo controle: recarrega as abas Filmes/Séries
-        if (currentTab == 1 || currentTab == 2) loadCards(force = true)
-    }
 
     private lateinit var lembreteText: TextView
 
@@ -205,7 +165,6 @@ class MainActivity : Activity() {
         Tmdb.carregarChave(this)
         Tmdb.aoMudarChave = { if (!isFinishing) loadCards(force = true) }
         Lembretes.aoMudar = { if (!isFinishing) mostrarLembretes() }
-        Iptv.aoMudar = { if (!isFinishing) conferirAoVivo() }
         val dm = resources.displayMetrics
         cardH = (dm.heightPixels * 0.36f).toInt()
         wideW = cardH * 16 / 9
@@ -234,7 +193,6 @@ class MainActivity : Activity() {
         handler.postDelayed({ if (!isFinishing) offerVolumeService() }, 1500)
         super.onResume()
         Brilho.restaurar(this)
-        conferirAoVivo()
         Atualizacao.conferir(this) { v -> if (!isFinishing) avisarAtualizacao(v) }
         startMeter()
         buildDock()
@@ -399,6 +357,13 @@ class MainActivity : Activity() {
         recreate()
     }
 
+    /** Abre o app TV Online; se não estiver instalado, avisa. */
+    private fun abrirTvOnline() {
+        val pkg = "com.geanalves.tvonline"
+        val i = packageManager.getLeanbackLaunchIntentForPackage(pkg) ?: packageManager.getLaunchIntentForPackage(pkg)
+        if (i != null) open(i) else toast("Instale o app TV Online (no Controle TV: Administração › Atualizar TV Online)")
+    }
+
     private fun goHome() {
         if (looping) {
             // Volta para o começo da fileira infinita
@@ -548,9 +513,10 @@ class MainActivity : Activity() {
                 aoVivoBg.setColor(if (has) INK else Color.TRANSPARENT)
                 setTextColor(if (has) Cores.papel else GRAY)
             }
-            setOnClickListener { startActivity(Intent(this@MainActivity, IptvActivity::class.java)) }
+            // Abre o app TV Online (TV ao vivo e Filmes e Séries ficam nele, fora do Início TV)
+            setOnClickListener { abrirTvOnline() }
         }
-        pintarAoVivo(EstadoAoVivo.SEM_LISTA)
+        aoVivoTab.text = "● TV ao vivo"
         tabRow.addView(aoVivoTab, LinearLayout.LayoutParams(WRAP, WRAP))
         // As abas cabem numa faixa que rola para o lado se faltar espaço
         val tabScroll = android.widget.HorizontalScrollView(this).apply {
@@ -697,18 +663,7 @@ class MainActivity : Activity() {
                 if (has) selectTab(index)
                 styleTabs()
             }
-            setOnClickListener {
-                // Filmes / Séries com lista: clicar abre a tela da lista
-                if ((index == 1 || index == 2) && Iptv.vod.link(this@MainActivity) != null) {
-                    startActivity(
-                        Intent(this@MainActivity, IptvActivity::class.java)
-                            .putExtra("modo", "vod")
-                            .putExtra("aba", index - 1),
-                    )
-                } else {
-                    selectTab(index)
-                }
-            }
+            setOnClickListener { selectTab(index) }
         }
 
     private fun styleTabs() {
@@ -797,53 +752,8 @@ class MainActivity : Activity() {
             showCards(recentes, if (recentes.isEmpty()) "Os apps que você abrir vão aparecer aqui" else null)
             return
         }
-        // Abas Filmes e Séries: mostram a sua lista de filmes e séries (se tiver)
-        if ((currentTab == 1 || currentTab == 2) && Iptv.vod.link(this) != null) {
-            if (!force) status("Carregando sua lista…")
-            val aba = currentTab
-            Iptv.vod.carregar(this) { erro ->
-                if (token != loadToken) return@carregar
-                val cards = if (erro == null) cardsDaLista(aba) else emptyList()
-                if (cards.isNotEmpty()) {
-                    showCards(cards, null)
-                } else {
-                    // Lista sem nada dessa aba (ou com erro): volta para os cartazes do TMDB
-                    carregarTmdb(token, force, if (erro != null) "Sua lista de filmes e séries não abriu" else null)
-                }
-            }
-            return
-        }
-        carregarTmdb(token, force, null)
-    }
-
-    /** Filmes (aba 1) ou séries (aba 2) da lista; cada série aparece uma vez só. */
-    private fun cardsDaLista(aba: Int): List<Card> {
-        val crianca = prefs.crianca(prefs.perfil)
-        val l = Iptv.vod
-        return if (aba == 1) {
-            val base = l.daAba(this, 0)
-            val filmes = if (crianca) {
-                val kids = l.daAba(this, 2).toHashSet()
-                base.filter { it in kids }.ifEmpty { kids.toList() }
-            } else {
-                base
-            }
-            filmes.take(300).map { Card(it.nome, null, null, it, listOf(it)) }
-        } else {
-            val base = l.daAba(this, 1)
-            val todas = if (crianca) l.daAba(this, 2).toHashSet().let { k -> base.filter { it in k } } else base
-            todas.groupBy { nomeSerie(it.nome) }.entries.take(300).map { (nome, eps) ->
-                Card(nome, null, null, eps.first(), eps)
-            }
-        }
-    }
-
-    private fun nomeSerie(n: String): String = Iptv.nomeSerie(n)
-
-
-    private fun carregarTmdb(token: Int, force: Boolean, aviso: String?) {
         if (!Tmdb.enabled) {
-            showCards(fallbackCards(), aviso)
+            showCards(fallbackCards(), null)
             return
         }
         if (!force) status("Carregando…")
@@ -852,7 +762,7 @@ class MainActivity : Activity() {
             if (items.isEmpty()) {
                 showCards(fallbackCards(), "Sem conexão com o TMDB agora · mostrando seus apps")
             } else {
-                showCards(items.map { Card(it.title, it, null) }, aviso)
+                showCards(items.map { Card(it.title, it, null) }, null)
             }
         }
     }
@@ -883,7 +793,6 @@ class MainActivity : Activity() {
 
     private fun showCards(cards: List<Card>, note: String?) {
         showingFallback = cards.any { it.app != null }
-        cartazes = cards.any { it.canal != null }
         fixedLayout = !showingFallback
         // Explorar, Filmes e Séries: fileira infinita (depois do último vem o primeiro de novo)
         looping = currentTab != TAB_CONTINUAR && cards.size >= 3
@@ -907,7 +816,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun cardWidth(i: Int): Int = if (fixedLayout && !cartazes && i < 2) bigW else narrowW
+    private fun cardWidth(i: Int): Int = if (fixedLayout && i < 2) bigW else narrowW
 
     private fun roundWidth(): Int = loopCards.indices.sumOf { cardWidth(it) + dp(26) }
 
@@ -1013,11 +922,7 @@ class MainActivity : Activity() {
 
         val tmdb = c.item
         val app = c.app
-        val canal = c.canal
-        if (canal != null) {
-            // Cartaz da sua lista; sem cartaz, o nome no meio
-            canal.logo?.let { u -> Iptv.logo(u, 520) { b -> if (b != null) img.setImageBitmap(b) } }
-        } else if (tmdb != null) {
+        if (tmdb != null) {
             Tmdb.image(tmdb.backdrop, "w780") { b ->
                 if (b != null) {
                     img.setImageBitmap(b)
@@ -1107,9 +1012,7 @@ class MainActivity : Activity() {
     private fun onCardSelected(c: Card, img: ImageView, meta: TextView) {
         setBackdrop((img.drawable as? BitmapDrawable)?.bitmap)
         val tmdb = c.item
-        if (c.canal != null) {
-            meta.text = if (c.episodios.size > 1) "${c.episodios.size} episódios · ${c.canal.grupo}" else c.canal.grupo
-        } else if (tmdb != null) {
+        if (tmdb != null) {
             if (meta.text.isNullOrEmpty()) meta.text = if (tmdb.type == "tv") "Série" else "Filme"
             Tmdb.details(tmdb) { d -> if (d.meta.isNotBlank()) meta.text = d.meta }
         } else {
@@ -1129,13 +1032,6 @@ class MainActivity : Activity() {
     }
 
     private fun openCard(c: Card) {
-        if (c.canal != null) {
-            // Toca direto: série começa no primeiro episódio (cima/baixo trocam de episódio)
-            Iptv.atual = Iptv.vod
-            Iptv.fila = c.episodios.ifEmpty { listOf(c.canal) }
-            startActivity(Intent(this, PlayerActivity::class.java).putExtra("indice", 0).putExtra("vod", true))
-            return
-        }
         val app = c.app
         if (app != null) {
             open(app.intent)
