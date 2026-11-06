@@ -1396,7 +1396,8 @@ class MainActivity : Activity() {
 
     private fun resetIdle() {
         handler.removeCallbacks(idle)
-        handler.postDelayed(idle, IDLE_MS)
+        // Descanso do Início TV desligado: fica o protetor de tela da própria TV
+        if (DESCANSO_PROPRIO) handler.postDelayed(idle, IDLE_MS)
     }
 
     private fun buildSaver(): FrameLayout {
@@ -1780,6 +1781,9 @@ class MainActivity : Activity() {
         private const val DOCK_GAP = 12
         /** Tempo parado até o descanso de tela (3 minutos) */
         private const val IDLE_MS = 3 * 60_000L
+
+        /** Mude para true para voltar a tela de descanso com filmes do Início TV. */
+        private const val DESCANSO_PROPRIO = false
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
         private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
     }
