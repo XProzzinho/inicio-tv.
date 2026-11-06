@@ -63,8 +63,6 @@ class MainActivity : Activity() {
 
     // ---------- bolinha da TV ao vivo ----------
 
-    private lateinit var aoVivoTab: TextView
-
     private lateinit var lembreteText: TextView
 
     private fun mostrarLembretes() {
@@ -357,13 +355,6 @@ class MainActivity : Activity() {
         recreate()
     }
 
-    /** Abre o app TV Online; se não estiver instalado, avisa. */
-    private fun abrirTvOnline() {
-        val pkg = "com.geanalves.tvonline"
-        val i = packageManager.getLeanbackLaunchIntentForPackage(pkg) ?: packageManager.getLaunchIntentForPackage(pkg)
-        if (i != null) open(i) else toast("Instale o app TV Online (no Controle TV: Administração › Atualizar TV Online)")
-    }
-
     private fun goHome() {
         if (looping) {
             // Volta para o começo da fileira infinita
@@ -500,24 +491,6 @@ class MainActivity : Activity() {
             lp.rightMargin = dp(6)
             tabRow.addView(t, lp)
         }
-        // "TV ao vivo": abre a lista de canais (IPTV)
-        val aoVivoBg = rounded(Color.TRANSPARENT, 20)
-        aoVivoTab = TextView(this).apply {
-            textSize = 17f
-            setTextColor(GRAY)
-            setPadding(dp(14), dp(6), dp(14), dp(6))
-            background = aoVivoBg
-            isFocusable = true
-            isClickable = true
-            setOnFocusChangeListener { _, has ->
-                aoVivoBg.setColor(if (has) INK else Color.TRANSPARENT)
-                setTextColor(if (has) Cores.papel else GRAY)
-            }
-            // Abre o app TV Online (TV ao vivo e Filmes e Séries ficam nele, fora do Início TV)
-            setOnClickListener { abrirTvOnline() }
-        }
-        aoVivoTab.text = "● TV ao vivo"
-        tabRow.addView(aoVivoTab, LinearLayout.LayoutParams(WRAP, WRAP))
         // As abas cabem numa faixa que rola para o lado se faltar espaço
         val tabScroll = android.widget.HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
