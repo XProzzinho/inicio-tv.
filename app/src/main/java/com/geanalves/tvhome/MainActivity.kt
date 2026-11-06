@@ -221,6 +221,111 @@ class MainActivity : Activity() {
     }
 
     /** Botão da lua: liga/desliga o modo escuro e redesenha a tela. */
+    /** Bolinha branca do topo; fica preta quando selecionada. */
+    private fun botaoAjustes(): View {
+        val bg = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(Cores.janela)
+        }
+        val icon = ImageView(this).apply {
+            setImageResource(R.drawable.ic_grade)
+            setColorFilter(PRETO)
+        }
+        return FrameLayout(this).apply {
+            background = bg
+            elevation = dpf(3)
+            isFocusable = true
+            isClickable = true
+            outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+            addView(icon, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER))
+            setOnClickListener { abrirAjustes() }
+            setOnFocusChangeListener { v, has ->
+                bg.setColor(if (has) PRETO else Cores.janela)
+                icon.setColorFilter(if (has) Cores.papel else PRETO)
+                v.animate().scaleX(if (has) 1.1f else 1f).scaleY(if (has) 1.1f else 1f).setDuration(120).start()
+            }
+        }
+    }
+
+    /** Grade 2×2 de ajustes rápidos, abaixo da bolinha, no canto direito. */
+    private fun abrirAjustes() {
+        val d = android.app.Dialog(this)
+        d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = rounded(Cores.janela, 26)
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            clipChildren = false
+            clipToPadding = false
+        }
+        d.setContentView(box)
+        d.window?.apply {
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            setDimAmount(0.12f)
+            setGravity(Gravity.TOP or Gravity.END)
+            attributes = attributes.apply {
+                x = dp(50)
+                y = dp(96)
+            }
+        }
+        fun bloco(res: Int, nome: String, acao: () -> Unit): View {
+            val bg = rounded(Cores.campo, 18)
+            val ic = ImageView(this).apply {
+                setImageResource(res)
+                setColorFilter(PRETO)
+            }
+            val tx = TextView(this).apply {
+                text = nome
+                textSize = 15f
+                setTextColor(PRETO)
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                setPadding(0, dp(10), 0, 0)
+            }
+            return LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = bg
+                setPadding(dp(16), dp(16), dp(16), dp(14))
+                isFocusable = true
+                isClickable = true
+                addView(ic, LinearLayout.LayoutParams(dp(26), dp(26)))
+                addView(tx)
+                setOnClickListener {
+                    d.dismiss()
+                    acao()
+                }
+                setOnFocusChangeListener { v, has ->
+                    bg.setColor(if (has) PRETO else Cores.campo)
+                    ic.setColorFilter(if (has) Cores.papel else PRETO)
+                    tx.setTextColor(if (has) Cores.papel else PRETO)
+                    v.animate().scaleX(if (has) 1.04f else 1f).scaleY(if (has) 1.04f else 1f).setDuration(120).start()
+                }
+            }
+        }
+        val blocos = ArrayList<View>()
+        // O Fire Stick não tem entradas HDMI
+        if (!isFireTv()) blocos += bloco(R.drawable.ic_input, "Entradas") { openInputs() }
+        blocos += bloco(R.drawable.ic_wifi, "Wi-Fi") { openWifi() }
+        blocos += bloco(if (Cores.escuro) R.drawable.ic_claro else R.drawable.ic_lua, if (Cores.escuro) "Modo claro" else "Modo escuro") { trocarModo() }
+        blocos += bloco(R.drawable.ic_menu, "Configurações") { open(Intent(Settings.ACTION_SETTINGS)) }
+        blocos.chunked(2).forEachIndexed { r, par ->
+            val linha = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                clipChildren = false
+                clipToPadding = false
+            }
+            par.forEachIndexed { c, v ->
+                val lp = LinearLayout.LayoutParams(dp(156), dp(104))
+                if (c == 0) lp.rightMargin = dp(10)
+                linha.addView(v, lp)
+            }
+            val llp = LinearLayout.LayoutParams(WRAP, WRAP)
+            if (r > 0) llp.topMargin = dp(10)
+            box.addView(linha, llp)
+        }
+        d.show()
+        blocos.first().requestFocus()
+    }
+
     private fun trocarModo() {
         prefs.escuro = !prefs.escuro
         Cores.manual = prefs.escuro
@@ -408,22 +513,14 @@ class MainActivity : Activity() {
         val clp = LinearLayout.LayoutParams(WRAP, WRAP)
         clp.rightMargin = dp(8)
         top.addView(clockCol, clp)
-        // Entradas (HDMI), Wi-Fi e Configurações
-        val group = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = rounded(Cores.janela, 30)
-            elevation = dpf(3)
+        // Uma bolinha só: abre a grade com Entradas, Wi-Fi, Modo escuro e Configurações
+        val group = FrameLayout(this).apply {
+            // Folga em volta para a bolinha crescer sem ser cortada
             setPadding(dp(6), dp(6), dp(6), dp(6))
             clipChildren = false
             clipToPadding = false
         }
-        // O Fire Stick não tem entradas HDMI: sem o botão de Entradas
-        if (!isFireTv()) group.addView(groupButton(R.drawable.ic_input, first = true) { openInputs() })
-        group.addView(groupButton(R.drawable.ic_wifi, first = isFireTv()) { openWifi() })
-        // Lua = deixa tudo escuro; sol = volta para o claro
-        group.addView(groupButton(if (Cores.escuro) R.drawable.ic_claro else R.drawable.ic_lua) { trocarModo() })
-        group.addView(groupButton(R.drawable.ic_menu) { open(Intent(Settings.ACTION_SETTINGS)) })
+        group.addView(botaoAjustes(), FrameLayout.LayoutParams(dp(54), dp(54)))
         top.addView(group, LinearLayout.LayoutParams(WRAP, WRAP))
         content.addView(top, LinearLayout.LayoutParams(MATCH, WRAP))
 
