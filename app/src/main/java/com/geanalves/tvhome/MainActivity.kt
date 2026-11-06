@@ -289,16 +289,25 @@ class MainActivity : Activity() {
         root.addView(content, FrameLayout.LayoutParams(MATCH, MATCH))
 
         // --- topo: título + abas | relógio + botões
+        // Nada aqui corta a bolinha do perfil quando ela cresce
         val top = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.TOP
+            clipChildren = false
+            clipToPadding = false
         }
-        val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val left = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+        }
         // Perfil (bolinha com a inicial) + saudação
         val profileRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 0, 0, dp(4))
+            clipChildren = false
+            clipToPadding = false
+            setPadding(dp(4), dp(4), 0, dp(6))
         }
         avatarBg = GradientDrawable().apply { shape = GradientDrawable.OVAL }
         val avatarRing = GradientDrawable().apply {
@@ -371,7 +380,7 @@ class MainActivity : Activity() {
             setOnClickListener { showForecast() }
             setOnFocusChangeListener { _, has -> clockBg.setColor(if (has) Cores.sutil else Color.TRANSPARENT) }
         }
-        // Relógio estilo tela de bloqueio: número de serifa com degradê azul → lilás
+        // Relógio estilo tela de bloqueio: número de serifa, preto como antes
         clock = TextView(this).apply {
             textSize = 60f
             setTextColor(INK)
@@ -379,18 +388,6 @@ class MainActivity : Activity() {
             includeFontPadding = false
             gravity = Gravity.END
             letterSpacing = -0.01f
-            addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
-                val t = v as TextView
-                val (c1, c2) = if (Cores.escuro) {
-                    0xFFB9D5F7.toInt() to 0xFFDCCBF6.toInt()
-                } else {
-                    0xFF3F7BE0.toInt() to 0xFF9466DE.toInt()
-                }
-                t.paint.shader = android.graphics.LinearGradient(
-                    0f, 0f, t.width.toFloat(), t.height.toFloat(), c1, c2, android.graphics.Shader.TileMode.CLAMP,
-                )
-                t.invalidate()
-            }
         }
         // Data embaixo, em verde-água: "sex., 6 de novembro"
         dateText = TextView(this).apply {
