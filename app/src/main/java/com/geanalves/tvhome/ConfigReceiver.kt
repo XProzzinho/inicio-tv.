@@ -32,11 +32,23 @@ class ConfigReceiver : BroadcastReceiver() {
         }
         // TV ao vivo: --es iptv "LINK DA LISTA M3U" ("" apaga)
         intent.getStringExtra("iptv")?.let { link ->
-            Iptv.salvarLink(app, link)
+            Iptv.aoVivo.salvarLink(app, link)
             Handler(Looper.getMainLooper()).post {
                 Toast.makeText(
                     app,
                     if (link.isBlank()) "Lista de canais removida" else "Lista de canais salva: abra TV ao vivo",
+                    Toast.LENGTH_LONG,
+                ).show()
+            }
+            resultData = "ok"
+        }
+        // Filmes e Séries: --es vod "LINK DA LISTA M3U" ("" apaga)
+        intent.getStringExtra("vod")?.let { link ->
+            Iptv.vod.salvarLink(app, link)
+            Handler(Looper.getMainLooper()).post {
+                Toast.makeText(
+                    app,
+                    if (link.isBlank()) "Lista de filmes e séries removida" else "Lista de filmes e séries salva",
                     Toast.LENGTH_LONG,
                 ).show()
             }

@@ -61,29 +61,40 @@ class MainActivity : Activity() {
     private enum class EstadoAoVivo { SEM_LISTA, FUNCIONANDO, ERRO }
 
     private lateinit var aoVivoTab: TextView
+    private lateinit var vodTab: TextView
 
-    /** Vermelha = lista funcionando, laranja = lista com erro, cinza = sem lista. */
-    private fun pintarAoVivo(e: EstadoAoVivo) {
-        if (!::aoVivoTab.isInitialized) return
+    /** Bolinha: vermelha = lista funcionando, laranja = lista com erro, cinza = sem lista. */
+    private fun pintarBolinha(tab: TextView, nome: String, e: EstadoAoVivo) {
         val cor = when (e) {
             EstadoAoVivo.FUNCIONANDO -> 0xFFFF3B30.toInt()
             EstadoAoVivo.ERRO -> 0xFFFF9500.toInt()
             EstadoAoVivo.SEM_LISTA -> GRAY
         }
-        val txt = android.text.SpannableString("● TV ao vivo")
+        val txt = android.text.SpannableString("● $nome")
         txt.setSpan(android.text.style.ForegroundColorSpan(cor), 0, 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        aoVivoTab.text = txt
+        tab.text = txt
+    }
+
+    private fun pintarAoVivo(e: EstadoAoVivo) {
+        if (::aoVivoTab.isInitialized) pintarBolinha(aoVivoTab, "TV ao vivo", e)
+    }
+
+    private fun conferirLista(l: ListaM3u, tab: () -> TextView?, nome: String) {
+        val t = tab() ?: return
+        if (l.link(this) == null) {
+            pintarBolinha(t, nome, EstadoAoVivo.SEM_LISTA)
+            return
+        }
+        l.carregar(this) { erro ->
+            if (!isFinishing) pintarBolinha(t, nome, if (erro == null) EstadoAoVivo.FUNCIONANDO else EstadoAoVivo.ERRO)
+        }
     }
 
     private fun conferirAoVivo() {
-        if (Iptv.link(this) == null) {
-            pintarAoVivo(EstadoAoVivo.SEM_LISTA)
-            return
-        }
-        Iptv.carregar(this) { erro ->
-            if (!isFinishing) pintarAoVivo(if (erro == null) EstadoAoVivo.FUNCIONANDO else EstadoAoVivo.ERRO)
-        }
+        conferirLista(Iptv.aoVivo, { if (::aoVivoTab.isInitialized) aoVivoTab else null }, "TV ao vivo")
+        conferirLista(Iptv.vod, { if (::vodTab.isInitialized) vodTab else null }, "Filmes e Séries")
     }
+
     private lateinit var lembreteText: TextView
 
     private fun mostrarLembretes() {
@@ -531,7 +542,31 @@ class MainActivity : Activity() {
         }
         pintarAoVivo(EstadoAoVivo.SEM_LISTA)
         tabRow.addView(aoVivoTab, LinearLayout.LayoutParams(WRAP, WRAP))
-        left.addView(tabRow)
+        // "Filmes e Séries": a segunda lista (abas Filmes e Séries lá dentro)
+        val vodBg = rounded(Color.TRANSPARENT, 20)
+        vodTab = TextView(this).apply {
+            textSize = 17f
+            setTextColor(GRAY)
+            setPadding(dp(14), dp(6), dp(14), dp(6))
+            background = vodBg
+            isFocusable = true
+            isClickable = true
+            setOnFocusChangeListener { _, has ->
+                vodBg.setColor(if (has) INK else Color.TRANSPARENT)
+                setTextColor(if (has) Cores.papel else GRAY)
+            }
+            setOnClickListener { startActivity(Intent(this@MainActivity, IptvActivity::class.java).putExtra("modo", "vod")) }
+        }
+        pintarBolinha(vodTab, "Filmes e Séries", EstadoAoVivo.SEM_LISTA)
+        tabRow.addView(vodTab, LinearLayout.LayoutParams(WRAP, WRAP))
+        // As abas cabem numa faixa que rola para o lado se faltar espaço
+        val tabScroll = android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            clipChildren = false
+            clipToPadding = false
+            addView(tabRow)
+        }
+        left.addView(tabScroll)
         top.addView(left, LinearLayout.LayoutParams(0, WRAP, 1f))
 
         // Relógio grande com o clima de Pirapora embaixo
