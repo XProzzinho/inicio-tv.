@@ -25,6 +25,9 @@ object Iptv {
     var canais: List<Canal> = emptyList()
         private set
 
+    /** Avisado quando o controle troca o link da lista (a bolinha muda de cor). */
+    var aoMudar: (() -> Unit)? = null
+
     private val pool = Executors.newFixedThreadPool(4)
     private val main = Handler(Looper.getMainLooper())
     private val logos = object : LruCache<String, Bitmap>(12 * 1024 * 1024) {
@@ -42,6 +45,7 @@ object Iptv {
         e.apply()
         cache(ctx).delete()
         canais = emptyList()
+        main.post { aoMudar?.invoke() }
     }
 
     // ---------- favoritos e último canal ----------

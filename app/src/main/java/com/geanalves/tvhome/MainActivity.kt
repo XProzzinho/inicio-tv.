@@ -55,6 +55,35 @@ class MainActivity : Activity() {
     private lateinit var clock: TextView
     private lateinit var weatherText: TextView
     private lateinit var dateText: TextView
+
+    // ---------- bolinha da TV ao vivo ----------
+
+    private enum class EstadoAoVivo { SEM_LISTA, FUNCIONANDO, ERRO }
+
+    private lateinit var aoVivoTab: TextView
+
+    /** Vermelha = lista funcionando, laranja = lista com erro, cinza = sem lista. */
+    private fun pintarAoVivo(e: EstadoAoVivo) {
+        if (!::aoVivoTab.isInitialized) return
+        val cor = when (e) {
+            EstadoAoVivo.FUNCIONANDO -> 0xFFFF3B30.toInt()
+            EstadoAoVivo.ERRO -> 0xFFFF9500.toInt()
+            EstadoAoVivo.SEM_LISTA -> GRAY
+        }
+        val txt = android.text.SpannableString("● TV ao vivo")
+        txt.setSpan(android.text.style.ForegroundColorSpan(cor), 0, 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        aoVivoTab.text = txt
+    }
+
+    private fun conferirAoVivo() {
+        if (Iptv.link(this) == null) {
+            pintarAoVivo(EstadoAoVivo.SEM_LISTA)
+            return
+        }
+        Iptv.carregar(this) { erro ->
+            if (!isFinishing) pintarAoVivo(if (erro == null) EstadoAoVivo.FUNCIONANDO else EstadoAoVivo.ERRO)
+        }
+    }
     private lateinit var lembreteText: TextView
 
     private fun mostrarLembretes() {
@@ -155,6 +184,7 @@ class MainActivity : Activity() {
         Tmdb.carregarChave(this)
         Tmdb.aoMudarChave = { if (!isFinishing) loadCards(force = true) }
         Lembretes.aoMudar = { if (!isFinishing) mostrarLembretes() }
+        Iptv.aoMudar = { if (!isFinishing) conferirAoVivo() }
         val dm = resources.displayMetrics
         cardH = (dm.heightPixels * 0.36f).toInt()
         wideW = cardH * 16 / 9
@@ -183,6 +213,7 @@ class MainActivity : Activity() {
         handler.postDelayed({ if (!isFinishing) offerVolumeService() }, 1500)
         super.onResume()
         Brilho.restaurar(this)
+        conferirAoVivo()
         Atualizacao.conferir(this) { v -> if (!isFinishing) avisarAtualizacao(v) }
         startMeter()
         buildDock()
@@ -485,23 +516,21 @@ class MainActivity : Activity() {
         }
         // "TV ao vivo": abre a lista de canais (IPTV)
         val aoVivoBg = rounded(Color.TRANSPARENT, 20)
-        tabRow.addView(
-            TextView(this).apply {
-                text = "● TV ao vivo"
-                textSize = 17f
-                setTextColor(GRAY)
-                setPadding(dp(14), dp(6), dp(14), dp(6))
-                background = aoVivoBg
-                isFocusable = true
-                isClickable = true
-                setOnFocusChangeListener { _, has ->
-                    aoVivoBg.setColor(if (has) INK else Color.TRANSPARENT)
-                    setTextColor(if (has) Cores.papel else GRAY)
-                }
-                setOnClickListener { startActivity(Intent(this@MainActivity, IptvActivity::class.java)) }
-            },
-            LinearLayout.LayoutParams(WRAP, WRAP),
-        )
+        aoVivoTab = TextView(this).apply {
+            textSize = 17f
+            setTextColor(GRAY)
+            setPadding(dp(14), dp(6), dp(14), dp(6))
+            background = aoVivoBg
+            isFocusable = true
+            isClickable = true
+            setOnFocusChangeListener { _, has ->
+                aoVivoBg.setColor(if (has) INK else Color.TRANSPARENT)
+                setTextColor(if (has) Cores.papel else GRAY)
+            }
+            setOnClickListener { startActivity(Intent(this@MainActivity, IptvActivity::class.java)) }
+        }
+        pintarAoVivo(EstadoAoVivo.SEM_LISTA)
+        tabRow.addView(aoVivoTab, LinearLayout.LayoutParams(WRAP, WRAP))
         left.addView(tabRow)
         top.addView(left, LinearLayout.LayoutParams(0, WRAP, 1f))
 
