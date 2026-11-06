@@ -54,6 +54,20 @@ class MainActivity : Activity() {
     private lateinit var dockRow: LinearLayout
     private lateinit var clock: TextView
     private lateinit var weatherText: TextView
+    private lateinit var dateText: TextView
+    private val dateFmt = SimpleDateFormat("EEE, d 'de' MMMM", Locale("pt", "BR"))
+
+    /** Fonte de serifa do relógio (Playfair Display, baixada na compilação); senão a serifa do Android. */
+    private fun fonteRelogio(): Typeface = try {
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            Typeface.Builder(assets, "relogio.ttf").setFontVariationSettings("'wght' 600").build()
+                ?: Typeface.create(Typeface.SERIF, Typeface.BOLD)
+        } else {
+            Typeface.createFromAsset(assets, "relogio.ttf")
+        }
+    } catch (_: Throwable) {
+        Typeface.create(Typeface.SERIF, Typeface.BOLD)
+    }
     private lateinit var greeting: TextView
     private lateinit var avatarText: TextView
     private lateinit var avatarBg: GradientDrawable
@@ -94,6 +108,7 @@ class MainActivity : Activity() {
                 return
             }
             clock.text = timeFmt.format(Date())
+            dateText.text = dateFmt.format(Date())
             greeting.text = saudacao()
             if (saver.visibility == View.VISIBLE) saverClock.text = clock.text
             Weather.now { t -> weatherText.text = t ?: "" }
@@ -356,12 +371,33 @@ class MainActivity : Activity() {
             setOnClickListener { showForecast() }
             setOnFocusChangeListener { _, has -> clockBg.setColor(if (has) Cores.sutil else Color.TRANSPARENT) }
         }
+        // Relógio estilo tela de bloqueio: número de serifa com degradê azul → lilás
         clock = TextView(this).apply {
-            textSize = 52f
+            textSize = 60f
             setTextColor(INK)
-            typeface = Typeface.create("sans-serif-thin", Typeface.NORMAL)
+            typeface = fonteRelogio()
             includeFontPadding = false
             gravity = Gravity.END
+            letterSpacing = -0.01f
+            addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ ->
+                val t = v as TextView
+                val (c1, c2) = if (Cores.escuro) {
+                    0xFFB9D5F7.toInt() to 0xFFDCCBF6.toInt()
+                } else {
+                    0xFF3F7BE0.toInt() to 0xFF9466DE.toInt()
+                }
+                t.paint.shader = android.graphics.LinearGradient(
+                    0f, 0f, t.width.toFloat(), t.height.toFloat(), c1, c2, android.graphics.Shader.TileMode.CLAMP,
+                )
+                t.invalidate()
+            }
+        }
+        // Data embaixo, em verde-água: "sex., 6 de novembro"
+        dateText = TextView(this).apply {
+            textSize = 17f
+            setTextColor(if (Cores.escuro) 0xFFA8EBD9.toInt() else 0xFF1E9A84.toInt())
+            gravity = Gravity.END
+            setPadding(0, dp(2), dp(2), 0)
         }
         weatherText = TextView(this).apply {
             textSize = 16f
@@ -370,6 +406,7 @@ class MainActivity : Activity() {
             setPadding(0, dp(4), dp(2), 0)
         }
         clockCol.addView(clock, LinearLayout.LayoutParams(WRAP, WRAP))
+        clockCol.addView(dateText, LinearLayout.LayoutParams(WRAP, WRAP))
         clockCol.addView(weatherText, LinearLayout.LayoutParams(WRAP, WRAP))
         val clp = LinearLayout.LayoutParams(WRAP, WRAP)
         clp.rightMargin = dp(8)
