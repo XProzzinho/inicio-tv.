@@ -78,7 +78,7 @@ object Iptv {
     )
 
     private fun semAcento(s: String) =
-        java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD).replace(Regex("\p{Mn}+"), "").lowercase()
+        java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "").lowercase()
 
     /** Canais de cada aba: separa pelo grupo da lista (e pelo nome do canal). */
     fun daAba(ctx: Context, aba: Int): List<Canal> = when (aba) {
