@@ -78,6 +78,11 @@ class MainActivity : Activity() {
     private var bigW = 0
     private var fixedLayout = false
 
+    // Fileira infinita: a lista se repete em "voltas" para os dois lados
+    private var loopCards: List<Card> = emptyList()
+    private var looping = false
+    private var loopNote: String? = null
+
     private val ptBr = Locale("pt", "BR")
     private val timeFmt = SimpleDateFormat("HH:mm", ptBr)
 
@@ -128,6 +133,7 @@ class MainActivity : Activity() {
         Cores.atualizar()
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Cores.fundoTopo))
         setContentView(buildShell())
+        cardsRow.viewTreeObserver.addOnGlobalFocusChangeListener { _, now -> onRowFocus(now) }
         buildMeter()
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
@@ -195,6 +201,13 @@ class MainActivity : Activity() {
     }
 
     private fun goHome() {
+        if (looping) {
+            // Volta para o começo da fileira infinita
+            showCards(loopCards, loopNote)
+            val n = loopCards.size
+            (cardsRow.getChildAt(n) as? ViewGroup)?.getChildAt(0)?.requestFocus()
+            return
+        }
         cardsScroll.smoothScrollTo(0, 0)
         (cardsRow.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.requestFocus()
     }
@@ -560,25 +573,93 @@ class MainActivity : Activity() {
     private fun showCards(cards: List<Card>, note: String?) {
         showingFallback = cards.any { it.app != null }
         fixedLayout = !showingFallback
+        // Explorar, Filmes e Séries: fileira infinita (depois do último vem o primeiro de novo)
+        looping = currentTab != TAB_CONTINUAR && cards.size >= 3
+        loopCards = cards
+        loopNote = note
         // Sem espaço em branco no fim da fileira de filmes
-        cardsRow.setPadding(0, dp(26), if (fixedLayout) dp(8) else resources.displayMetrics.widthPixels, dp(8))
+        cardsRow.setPadding(0, dp(26), if (fixedLayout || looping) dp(8) else resources.displayMetrics.widthPixels, dp(8))
         status(note)
         val focusWasHere = cardsRow.hasFocus()
         cardsRow.removeAllViews()
         selected = null
         cardsScroll.scrollTo(0, 0)
-        cards.forEachIndexed { i, c ->
-            val v = makeCard(c)
-            val w = if (fixedLayout && i < 2) bigW else narrowW
-            val lp = LinearLayout.LayoutParams(w, WRAP)
-            lp.rightMargin = dp(26)
-            cardsRow.addView(v, lp)
-        }
-        val first = cardsRow.getChildAt(0) ?: return
+        // Três voltas: começa na do meio, para poder ir para os dois lados
+        repeat(if (looping) 3 else 1) { addRound(atStart = false) }
+        val first = cardsRow.getChildAt(if (looping) cards.size else 0) ?: return
         select(first, animate = false)
+        if (looping) afterLayout { cardsScroll.scrollTo((first.left - if (fixedLayout) 0 else dp(4)).coerceAtLeast(0), 0) }
         if (firstLoad || focusWasHere || currentFocus == null) {
             firstLoad = false
             first.post { (first as ViewGroup).getChildAt(0).requestFocus() }
+        }
+    }
+
+    private fun cardWidth(i: Int): Int = if (fixedLayout && i < 2) bigW else narrowW
+
+    private fun roundWidth(): Int = loopCards.indices.sumOf { cardWidth(it) + dp(26) }
+
+    /** Coloca uma volta inteira da lista no fim ou no começo da fileira. */
+    private fun addRound(atStart: Boolean) {
+        loopCards.forEachIndexed { i, c ->
+            val lp = LinearLayout.LayoutParams(cardWidth(i), WRAP)
+            lp.rightMargin = dp(26)
+            if (atStart) cardsRow.addView(makeCard(c), i, lp) else cardsRow.addView(makeCard(c), lp)
+        }
+    }
+
+    private fun removeRound(atStart: Boolean) {
+        val n = loopCards.size
+        if (atStart) cardsRow.removeViews(0, n) else cardsRow.removeViews(cardsRow.childCount - n, n)
+    }
+
+    private fun afterLayout(block: () -> Unit) {
+        cardsScroll.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                cardsScroll.viewTreeObserver.removeOnPreDrawListener(this)
+                block()
+                return true
+            }
+        })
+    }
+
+    /** Desloca a rolagem quando a fileira cresce/encolhe à esquerda, sem pulo na tela. */
+    private fun shiftScroll(before: Int, dx: Int) {
+        afterLayout {
+            cardsScroll.smoothScrollBy(0, 0) // para a animação antiga
+            cardsScroll.scrollTo(before + dx, 0)
+            val item = selected ?: return@afterLayout
+            val r = android.graphics.Rect(item.left, item.top, item.right, item.bottom)
+            cardsScroll.requestChildRectangleOnScreen(cardsRow, r, false)
+        }
+    }
+
+    /** Perto da ponta da fileira? Coloca mais uma volta para nunca acabar. */
+    private fun onRowFocus(now: View?) {
+        if (!looping) return
+        val item = now?.parent as? View ?: return
+        if (item.parent !== cardsRow) return
+        val n = loopCards.size
+        val edge = minOf(n, 8)
+        val idx = cardsRow.indexOfChild(item)
+        if (idx >= cardsRow.childCount - edge) {
+            cardsRow.post {
+                if (!looping) return@post
+                addRound(atStart = false)
+                if (cardsRow.childCount > n * MAX_VOLTAS) {
+                    val before = cardsScroll.scrollX
+                    removeRound(atStart = true)
+                    shiftScroll(before, -roundWidth())
+                }
+            }
+        } else if (idx < edge) {
+            cardsRow.post {
+                if (!looping) return@post
+                val before = cardsScroll.scrollX
+                addRound(atStart = true)
+                shiftScroll(before, roundWidth())
+                if (cardsRow.childCount > n * MAX_VOLTAS) removeRound(atStart = false)
+            }
         }
     }
 
@@ -1607,6 +1688,7 @@ class MainActivity : Activity() {
         private val GRAY: Int get() = Cores.cinza
         private const val PRETO = 0xFF1C1C1E.toInt()
         private const val TAB_CONTINUAR = 3
+        private const val MAX_VOLTAS = 5
         /** Mude para true para o fundo pegar as cores do filme selecionado */
         private const val FUNDO_COM_FILME = false
         /** Os 15 avatares desenhados: 0-4 feminino, 5-9 masculino, 10-14 infantil */
