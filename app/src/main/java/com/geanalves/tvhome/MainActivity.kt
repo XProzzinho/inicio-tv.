@@ -1488,9 +1488,10 @@ class MainActivity : Activity() {
         android.os.Build.MANUFACTURER.equals("Amazon", true) ||
             packageManager.hasSystemFeature("amazon.hardware.fire_tv")
 
-    // ---------- medidor no canto de baixo: internet (Mb/s) e FPS da tela ----------
+    // ---------- medidor de FPS no canto de baixo ----------
 
     private lateinit var meterText: TextView
+    private lateinit var meterDot: GradientDrawable
     private var meterOn = false
     private var frames = 0
     private var lastRx = 0L
@@ -1505,37 +1506,66 @@ class MainActivity : Activity() {
         override fun run() {
             if (!meterOn) return
             val now = android.os.SystemClock.elapsedRealtime()
-            val rx = TrafficStats.getTotalRxBytes()
             val secs = ((now - lastT) / 1000f).coerceAtLeast(0.2f)
-            val mbps = if (rx >= 0 && lastRx >= 0 && lastT > 0) (rx - lastRx) * 8f / 1_000_000f / secs else 0f
             val fps = Math.round(frames / secs)
-            lastRx = rx
             lastT = now
             frames = 0
-            val net = if (mbps >= 10) "%.0f".format(ptBr, mbps) else "%.1f".format(ptBr, mbps)
-            meterText.text = "↓ $net Mb/s  ·  $fps FPS"
+            meterText.text = fps.toString()
+            // Verde = liso, amarelo = médio, vermelho = travando
+            meterDot.setColor(
+                when {
+                    fps >= 50 -> 0xFF34C759.toInt()
+                    fps >= 30 -> 0xFFFFCC00.toInt()
+                    else -> 0xFFFF3B30.toInt()
+                },
+            )
             handler.postDelayed(this, 1000)
         }
     }
 
     private fun buildMeter() {
-        meterText = TextView(this).apply {
-            textSize = 12f
-            setTextColor(0xFF8E8E93.toInt())
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setShadowLayer(dpf(6), 0f, 0f, Cores.fundoTopo)
+        val pill = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = rounded(Cores.janela, 20)
+            elevation = dpf(3)
+            setPadding(dp(12), dp(6), dp(14), dp(6))
         }
+        meterDot = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(0xFF34C759.toInt())
+        }
+        pill.addView(View(this).apply { background = meterDot }, LinearLayout.LayoutParams(dp(8), dp(8)))
+        meterText = TextView(this).apply {
+            text = "--"
+            textSize = 15f
+            setTextColor(INK)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            setPadding(dp(8), 0, dp(4), 0)
+            includeFontPadding = false
+            minEms = 1
+        }
+        pill.addView(meterText)
+        pill.addView(
+            TextView(this).apply {
+                text = "FPS"
+                textSize = 10f
+                setTextColor(GRAY)
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                letterSpacing = 0.08f
+                includeFontPadding = false
+            },
+        )
         val lp = FrameLayout.LayoutParams(WRAP, WRAP, Gravity.BOTTOM or Gravity.END)
         lp.marginEnd = dp(20)
         lp.bottomMargin = dp(8)
-        addContentView(meterText, lp)
+        addContentView(pill, lp)
     }
 
     private fun startMeter() {
         if (meterOn) return
         meterOn = true
         frames = 0
-        lastRx = TrafficStats.getTotalRxBytes()
         lastT = android.os.SystemClock.elapsedRealtime()
         Choreographer.getInstance().postFrameCallback(frameCb)
         handler.postDelayed(meterTick, 1000)
