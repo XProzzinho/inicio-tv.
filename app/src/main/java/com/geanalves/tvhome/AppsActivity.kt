@@ -84,6 +84,7 @@ class AppsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
+        Cores.manual = prefs.escuro
         Cores.atualizar()
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Cores.fundoTopo))
         setContentView(buildShell())

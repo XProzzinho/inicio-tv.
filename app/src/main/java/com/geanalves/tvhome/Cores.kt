@@ -16,9 +16,12 @@ object Cores {
     /** Mude para true para escurecer a tela à noite (18h às 6h). */
     private const val ESCURO_A_NOITE = false
 
-    /** Atualiza o modo conforme a hora. Devolve true se mudou. */
+    /** Modo escuro ligado pelo botão da lua (fica salvo). */
+    var manual = false
+
+    /** Atualiza o modo conforme o botão e a hora. Devolve true se mudou. */
     fun atualizar(): Boolean {
-        val novo = ESCURO_A_NOITE && eNoite()
+        val novo = manual || (ESCURO_A_NOITE && eNoite())
         val mudou = novo != escuro
         escuro = novo
         return mudou
@@ -47,4 +50,10 @@ object Cores {
     val cartao: Int get() = if (escuro) 0xFF2C2C2E.toInt() else 0xFFE5E5EA.toInt()
     val cartaoApp: Int get() = if (escuro) 0xFF2C2C2E.toInt() else 0xFFFFFFFF.toInt()
     val sutil: Int get() = if (escuro) 0x1FFFFFFF else 0x1A000000
+
+    /** Fundo das janelas e da barrinha do Wi-Fi (branco no claro). */
+    val janela: Int get() = if (escuro) 0xFF2C2C2E.toInt() else 0xFFFFFFFF.toInt()
+
+    /** Botões dentro das janelas. */
+    val campo: Int get() = if (escuro) 0xFF3A3A3C.toInt() else 0xFFF2F2F7.toInt()
 }

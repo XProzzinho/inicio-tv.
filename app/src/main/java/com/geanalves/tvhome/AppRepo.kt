@@ -72,6 +72,13 @@ class Prefs(ctx: Context) {
 
     // ---------- perfis (3) ----------
 
+    /** Modo escuro escolhido no botão da lua. */
+    var escuro: Boolean
+        get() = sp.getBoolean("modo_escuro", false)
+        set(v) {
+            sp.edit().putBoolean("modo_escuro", v).apply()
+        }
+
     /** Perfil em uso: 0, 1 ou 2. */
     var perfil: Int
         get() = sp.getInt("perfil", 0).coerceIn(0, PERFIS - 1)

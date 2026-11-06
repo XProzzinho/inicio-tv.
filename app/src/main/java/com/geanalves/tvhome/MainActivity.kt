@@ -123,6 +123,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
+        Cores.manual = prefs.escuro
         val dm = resources.displayMetrics
         cardH = (dm.heightPixels * 0.36f).toInt()
         wideW = cardH * 16 / 9
@@ -198,6 +199,14 @@ class MainActivity : Activity() {
     @Deprecated("Tela inicial não fecha com o botão Voltar")
     override fun onBackPressed() {
         goHome()
+    }
+
+    /** Botão da lua: liga/desliga o modo escuro e redesenha a tela. */
+    private fun trocarModo() {
+        prefs.escuro = !prefs.escuro
+        Cores.manual = prefs.escuro
+        Cores.atualizar()
+        recreate()
     }
 
     private fun goHome() {
@@ -357,7 +366,7 @@ class MainActivity : Activity() {
         val group = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            background = rounded(Color.WHITE, 30)
+            background = rounded(Cores.janela, 30)
             elevation = dpf(3)
             setPadding(dp(6), dp(6), dp(6), dp(6))
             clipChildren = false
@@ -366,6 +375,8 @@ class MainActivity : Activity() {
         // O Fire Stick não tem entradas HDMI: sem o botão de Entradas
         if (!isFireTv()) group.addView(groupButton(R.drawable.ic_input, first = true) { openInputs() })
         group.addView(groupButton(R.drawable.ic_wifi, first = isFireTv()) { openWifi() })
+        // Lua = deixa tudo escuro; sol = volta para o claro
+        group.addView(groupButton(if (Cores.escuro) R.drawable.ic_claro else R.drawable.ic_lua) { trocarModo() })
         group.addView(groupButton(R.drawable.ic_menu) { open(Intent(Settings.ACTION_SETTINGS)) })
         top.addView(group, LinearLayout.LayoutParams(WRAP, WRAP))
         content.addView(top, LinearLayout.LayoutParams(MATCH, WRAP))
@@ -480,7 +491,7 @@ class MainActivity : Activity() {
             setOnClickListener { onClick() }
             setOnFocusChangeListener { v, has ->
                 bg.setColor(if (has) PRETO else Color.TRANSPARENT)
-                icon.setColorFilter(if (has) Color.WHITE else PRETO)
+                icon.setColorFilter(if (has) Cores.papel else PRETO)
                 v.animate().scaleX(if (has) 1.08f else 1f).scaleY(if (has) 1.08f else 1f).setDuration(120).start()
             }
         }
@@ -1014,7 +1025,7 @@ class MainActivity : Activity() {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            background = rounded(Color.WHITE, 28)
+            background = rounded(Cores.janela, 28)
             setPadding(dp(44), dp(30), dp(44), dp(28))
             elevation = dpf(24)
         }
@@ -1035,7 +1046,7 @@ class MainActivity : Activity() {
 
     /** Botão em pílula: cinza-claro, fica preto quando selecionado. */
     private fun pill(text: String, onClick: () -> Unit): TextView {
-        val bg = rounded(0xFFF2F2F7.toInt(), 22)
+        val bg = rounded(Cores.campo, 22)
         return TextView(this).apply {
             this.text = text
             textSize = 16f
@@ -1047,8 +1058,8 @@ class MainActivity : Activity() {
             isClickable = true
             setOnClickListener { onClick() }
             setOnFocusChangeListener { v, has ->
-                bg.setColor(if (has) PRETO else 0xFFF2F2F7.toInt())
-                setTextColor(if (has) Color.WHITE else PRETO)
+                bg.setColor(if (has) PRETO else Cores.campo)
+                setTextColor(if (has) Cores.papel else PRETO)
                 v.animate().scaleX(if (has) 1.06f else 1f).scaleY(if (has) 1.06f else 1f).setDuration(120).start()
             }
         }
@@ -1161,7 +1172,7 @@ class MainActivity : Activity() {
             setHintTextColor(0xFF8E8E93.toInt())
             hint = "Nome"
             gravity = Gravity.CENTER
-            background = rounded(0xFFF2F2F7.toInt(), 14)
+            background = rounded(Cores.campo, 14)
             setPadding(dp(16), dp(9), dp(16), dp(9))
         }
         box.addView(input, LinearLayout.LayoutParams(dp(300), WRAP))
@@ -1511,7 +1522,7 @@ class MainActivity : Activity() {
             textSize = 12f
             setTextColor(0xFF8E8E93.toInt())
             typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setShadowLayer(dpf(6), 0f, 0f, Color.WHITE)
+            setShadowLayer(dpf(6), 0f, 0f, Cores.fundoTopo)
         }
         val lp = FrameLayout.LayoutParams(WRAP, WRAP, Gravity.BOTTOM or Gravity.END)
         lp.marginEnd = dp(20)
@@ -1686,7 +1697,8 @@ class MainActivity : Activity() {
         private const val DESTAQUES = 3
         private val INK: Int get() = Cores.tinta
         private val GRAY: Int get() = Cores.cinza
-        private const val PRETO = 0xFF1C1C1E.toInt()
+        /** Texto e ícones: preto no claro, branco no escuro. */
+        private val PRETO: Int get() = Cores.tinta
         private const val TAB_CONTINUAR = 3
         private const val MAX_VOLTAS = 5
         /** Mude para true para o fundo pegar as cores do filme selecionado */
