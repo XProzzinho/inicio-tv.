@@ -300,6 +300,14 @@ class MainActivity : Activity() {
             isFocusable = true
             isClickable = true
             setOnClickListener { showProfiles() }
+            // Sempre redonda: corta a foto em círculo e tira o destaque quadrado da TV
+            outlineProvider = object : android.view.ViewOutlineProvider() {
+                override fun getOutline(v: View, o: android.graphics.Outline) {
+                    o.setOval(0, 0, v.width, v.height)
+                }
+            }
+            clipToOutline = true
+            if (android.os.Build.VERSION.SDK_INT >= 26) defaultFocusHighlightEnabled = false
             setOnFocusChangeListener { v, has ->
                 v.foreground = if (has) avatarRing else null
                 v.animate().scaleX(if (has) 1.15f else 1f).scaleY(if (has) 1.15f else 1f).setDuration(120).start()
