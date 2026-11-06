@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <!-- Véu preto do brilho por cima da tela -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!-- Instalar a versão nova baixada do GitHub -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
@@ -69,6 +71,18 @@
                 <action android:name="com.geanalves.tvhome.BRILHO" />
             </intent-filter>
         </receiver>
+
+        <!-- Chave do TMDB e ícones dos apps, mandados pelo Controle TV -->
+        <receiver
+            android:name=".ConfigReceiver"
+            android:exported="true" />
+
+        <!-- Entrega o APK da atualização para o instalador -->
+        <provider
+            android:name=".ApkProvider"
+            android:authorities="com.geanalves.tvhome.apk"
+            android:exported="false"
+            android:grantUriPermissions="true" />
 
         <!-- Volume em número (precisa ser ativado em Acessibilidade) -->
         <service

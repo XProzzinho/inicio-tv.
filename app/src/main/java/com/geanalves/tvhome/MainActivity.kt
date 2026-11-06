@@ -124,6 +124,8 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
         Cores.manual = prefs.escuro
+        Tmdb.carregarChave(this)
+        Tmdb.aoMudarChave = { if (!isFinishing) loadCards(force = true) }
         val dm = resources.displayMetrics
         cardH = (dm.heightPixels * 0.36f).toInt()
         wideW = cardH * 16 / 9
@@ -152,6 +154,7 @@ class MainActivity : Activity() {
         handler.postDelayed({ if (!isFinishing) offerVolumeService() }, 1500)
         super.onResume()
         Brilho.restaurar(this)
+        Atualizacao.conferir(this) { v -> if (!isFinishing) avisarAtualizacao(v) }
         startMeter()
         buildDock()
         handler.removeCallbacks(tick)
@@ -1019,6 +1022,64 @@ class MainActivity : Activity() {
     }
 
     // ---------- perfis: janela branca e limpa ----------
+
+    // ---------- versão nova ----------
+
+    private fun avisarAtualizacao(v: Atualizacao.Versao) {
+        val (d, box) = whiteDialog()
+        box.addView(dialogTitle("Versão nova!"))
+        val info = TextView(this).apply {
+            text = "${v.nome} está disponível.\nVocê tem a versão 1.${BuildConfig.VERSION_CODE}."
+            textSize = 16f
+            setTextColor(GRAY)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(10), 0, dp(18))
+        }
+        box.addView(info)
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        var baixando = false
+        val atualizar = pill("Atualizar") {
+            if (baixando) return@pill
+            if (android.os.Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+                // Primeira vez: a TV precisa deixar o Início TV instalar atualizações
+                toast("Permita o Início TV instalar apps e aperte Atualizar de novo")
+                try {
+                    startActivity(
+                        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:$packageName"))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                } catch (_: Throwable) {
+                    toast("Libere \"Fontes desconhecidas\" para o Início TV nas Configurações")
+                }
+                return@pill
+            }
+            baixando = true
+            info.text = "Baixando… 0%"
+            Atualizacao.baixar(this, v, progresso = { info.text = "Baixando… $it%" }) { f ->
+                baixando = false
+                if (f == null) {
+                    info.text = "Não consegui baixar. Confira a internet e tente de novo."
+                } else {
+                    d.dismiss()
+                    if (!Atualizacao.instalar(this)) toast("Não consegui abrir o instalador")
+                }
+            }
+        }
+        val depois = pill("Depois") {
+            Atualizacao.adiar(this, v)
+            d.dismiss()
+        }
+        val lp = LinearLayout.LayoutParams(WRAP, WRAP)
+        lp.rightMargin = dp(12)
+        row.addView(atualizar, lp)
+        row.addView(depois, LinearLayout.LayoutParams(WRAP, WRAP))
+        box.addView(row)
+        d.show()
+        atualizar.requestFocus()
+    }
 
     private fun whiteDialog(): Pair<android.app.Dialog, LinearLayout> {
         val d = android.app.Dialog(this)

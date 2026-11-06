@@ -15,8 +15,28 @@ object Tmdb {
     private const val API = "https://api.themoviedb.org/3"
     private const val IMG = "https://image.tmdb.org/t/p/"
 
-    private val key: String = BuildConfig.TMDB_KEY.trim()
+    // Chave mandada pelo Controle TV; se não tiver, usa a da compilação (segredo do GitHub)
+    @Volatile
+    private var key: String = BuildConfig.TMDB_KEY.trim()
     val enabled: Boolean get() = key.isNotBlank()
+
+    /** Avisado quando o controle troca a chave (a tela recarrega os cartazes). */
+    var aoMudarChave: (() -> Unit)? = null
+
+    fun carregarChave(ctx: android.content.Context) {
+        val salva = ctx.getSharedPreferences("inicio", android.content.Context.MODE_PRIVATE).getString("tmdb_chave", null)
+        key = (salva ?: BuildConfig.TMDB_KEY).trim()
+    }
+
+    fun salvarChave(ctx: android.content.Context, chave: String) {
+        val sp = ctx.getSharedPreferences("inicio", android.content.Context.MODE_PRIVATE).edit()
+        if (chave.isBlank()) sp.remove("tmdb_chave") else sp.putString("tmdb_chave", chave.trim())
+        sp.apply()
+        key = (chave.ifBlank { BuildConfig.TMDB_KEY }).trim()
+        lists.clear()
+        details.clear()
+        main.post { aoMudarChave?.invoke() }
+    }
 
     data class Item(val id: Int, val type: String, val title: String, val backdrop: String)
     data class Details(val meta: String, val providerId: Int?, val providerName: String?)
