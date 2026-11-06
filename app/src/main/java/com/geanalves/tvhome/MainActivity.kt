@@ -483,6 +483,25 @@ class MainActivity : Activity() {
             lp.rightMargin = dp(6)
             tabRow.addView(t, lp)
         }
+        // "TV ao vivo": abre a lista de canais (IPTV)
+        val aoVivoBg = rounded(Color.TRANSPARENT, 20)
+        tabRow.addView(
+            TextView(this).apply {
+                text = "● TV ao vivo"
+                textSize = 17f
+                setTextColor(GRAY)
+                setPadding(dp(14), dp(6), dp(14), dp(6))
+                background = aoVivoBg
+                isFocusable = true
+                isClickable = true
+                setOnFocusChangeListener { _, has ->
+                    aoVivoBg.setColor(if (has) INK else Color.TRANSPARENT)
+                    setTextColor(if (has) Cores.papel else GRAY)
+                }
+                setOnClickListener { startActivity(Intent(this@MainActivity, IptvActivity::class.java)) }
+            },
+            LinearLayout.LayoutParams(WRAP, WRAP),
+        )
         left.addView(tabRow)
         top.addView(left, LinearLayout.LayoutParams(0, WRAP, 1f))
 
