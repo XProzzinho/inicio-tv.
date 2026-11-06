@@ -175,8 +175,9 @@ class IptvActivity : Activity() {
             val bg = redondo(Color.TRANSPARENT, dpf(20))
             val t = TextView(this).apply {
                 text = g
-                textSize = 17f
-                setPadding(dp(16), dp(7), dp(16), dp(7))
+                textSize = 19f
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                setPadding(dp(18), dp(8), dp(18), dp(8))
                 background = bg
                 isFocusable = true
                 isClickable = true
@@ -206,14 +207,18 @@ class IptvActivity : Activity() {
             val bg = t.background as GradientDrawable
             when {
                 t.isFocused -> {
+                    bg.setStroke(0, Color.TRANSPARENT)
                     bg.setColor(Cores.tinta)
                     t.setTextColor(Cores.papel)
                 }
                 t.tag == grupoAtual -> {
-                    bg.setColor(Cores.sutil)
+                    // Aba escolhida: contorno arredondado (como na foto)
+                    bg.setColor(Color.TRANSPARENT)
+                    bg.setStroke(dp(2), Cores.tinta)
                     t.setTextColor(Cores.tinta)
                 }
                 else -> {
+                    bg.setStroke(0, Color.TRANSPARENT)
                     bg.setColor(Color.TRANSPARENT)
                     t.setTextColor(Cores.cinza)
                 }
@@ -243,6 +248,19 @@ class IptvActivity : Activity() {
         }
         val favs = Iptv.favoritos(this)
         val larg = (resources.displayMetrics.widthPixels - dp(112 + 12) - dp(16) * (colunas - 1)) / colunas
+        // Topo separado: destaque grande que passa sozinho + dois cartões altos do lado
+        if (lista.size >= 3) {
+            grade.addView(linhaDestaque(lista), LinearLayout.LayoutParams(-1, dp(250)).apply { bottomMargin = dp(22) })
+            grade.addView(
+                TextView(this).apply {
+                    text = "Todos os canais"
+                    textSize = 20f
+                    setTextColor(Cores.tinta)
+                    typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+                    setPadding(dp(2), 0, 0, dp(12))
+                },
+            )
+        }
         var linha: LinearLayout? = null
         // Até 600 canais por grupo para não pesar a TV
         lista.take(600).forEachIndexed { i, c ->
@@ -258,6 +276,153 @@ class IptvActivity : Activity() {
             if (i % colunas != colunas - 1) lp.rightMargin = dp(16)
             linha!!.addView(cartao(c, i, c.url in favs), lp)
         }
+    }
+
+    // ---------- destaque ----------
+
+    private val h = Handler(Looper.getMainLooper())
+    private var girar: Runnable? = null
+
+    override fun onPause() {
+        super.onPause()
+        girar?.let { h.removeCallbacks(it) }
+    }
+
+    /** Destaque grande (passa entre os 4 primeiros canais) e dois cartões altos à direita. */
+    private fun linhaDestaque(lista: List<Iptv.Canal>): View {
+        val linha = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            clipChildren = false
+            clipToPadding = false
+        }
+        val roda = lista.take(4)
+        var atual = 0
+
+        val bg = redondo(Cores.janela, dpf(22))
+        val anel = GradientDrawable().apply {
+            cornerRadius = dpf(22)
+            setColor(Color.TRANSPARENT)
+        }
+        val logo = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            background = redondo(Cores.campo, dpf(18))
+            setPadding(dp(22), dp(22), dp(22), dp(22))
+        }
+        val aoVivo = TextView(this).apply {
+            text = "● AO VIVO"
+            textSize = 13f
+            setTextColor(Color.WHITE)
+            typeface = Typeface.DEFAULT_BOLD
+            background = redondo(0xFFFF3B30.toInt(), dpf(12))
+            setPadding(dp(10), dp(4), dp(10), dp(4))
+        }
+        val nome = TextView(this).apply {
+            textSize = 30f
+            setTextColor(Cores.tinta)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            maxLines = 2
+            ellipsize = TextUtils.TruncateAt.END
+            setPadding(0, dp(10), 0, dp(4))
+        }
+        val grupo = TextView(this).apply {
+            textSize = 16f
+            setTextColor(Cores.cinza)
+        }
+        val dica = TextView(this).apply {
+            text = "OK para assistir"
+            textSize = 14f
+            setTextColor(Cores.cinza)
+            setPadding(0, dp(14), 0, 0)
+        }
+        // Pontinhos embaixo: qual dos 4 está aparecendo
+        val pontos = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val bolinhas = roda.map {
+            View(this).also { v ->
+                pontos.addView(v, LinearLayout.LayoutParams(dp(8), dp(8)).apply { rightMargin = dp(6) })
+            }
+        }
+        val textos = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(26), dp(6), dp(16), 0)
+            addView(aoVivo, LinearLayout.LayoutParams(-2, -2))
+            addView(nome)
+            addView(grupo)
+            addView(dica)
+        }
+        val corpo = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(logo, LinearLayout.LayoutParams(dp(250), -1))
+            addView(textos, LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        val destaque = FrameLayout(this).apply {
+            background = bg
+            foreground = anel
+            elevation = dpf(2)
+            isFocusable = true
+            isClickable = true
+            setPadding(dp(18), dp(18), dp(18), dp(18))
+            addView(corpo, FrameLayout.LayoutParams(-1, -1))
+            addView(pontos, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.END))
+        }
+
+        fun mostrar(i: Int) {
+            atual = i
+            val c = roda[i]
+            nome.text = c.nome
+            grupo.text = c.grupo
+            logo.setImageDrawable(null)
+            c.logo?.let { u -> Iptv.logo(u) { b -> if (b != null && roda[atual] == c) logo.setImageBitmap(b) } }
+            bolinhas.forEachIndexed { k, v ->
+                v.background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(if (k == i) 0xFFFF3B30.toInt() else Cores.campo)
+                }
+            }
+        }
+        mostrar(0)
+
+        // Passa para o próximo a cada 6 segundos (para enquanto estiver selecionado)
+        girar?.let { h.removeCallbacks(it) }
+        val r = object : Runnable {
+            override fun run() {
+                if (!destaque.isFocused && roda.size > 1) mostrar((atual + 1) % roda.size)
+                h.postDelayed(this, 6000)
+            }
+        }
+        girar = r
+        h.postDelayed(r, 6000)
+
+        destaque.setOnClickListener {
+            startActivity(
+                Intent(this, PlayerActivity::class.java).putExtra("grupo", grupoAtual).putExtra("indice", atual),
+            )
+        }
+        destaque.setOnFocusChangeListener { v, has ->
+            anel.setStroke(if (has) dp(4) else 0, Cores.tinta)
+            v.animate().scaleX(if (has) 1.02f else 1f).scaleY(if (has) 1.02f else 1f)
+                .translationZ(if (has) dpf(8) else 0f).setDuration(140).start()
+        }
+        // Esquerda/direita no destaque também trocam o canal mostrado
+        destaque.setOnKeyListener { _, code, ev ->
+            if (ev.action == KeyEvent.ACTION_DOWN && code == KeyEvent.KEYCODE_DPAD_LEFT && atual > 0) {
+                mostrar(atual - 1)
+                true
+            } else {
+                false
+            }
+        }
+
+        linha.addView(destaque, LinearLayout.LayoutParams(0, -1, 2.2f).apply { rightMargin = dp(16) })
+        // Dois cartões altos: os canais 5 e 6 (ou os seguintes que existirem)
+        val altos = lista.drop(4).take(2).ifEmpty { lista.drop(1).take(2) }
+        altos.forEachIndexed { k, c ->
+            val idx = lista.indexOf(c)
+            val lp = LinearLayout.LayoutParams(0, -1, 1f)
+            if (k == 0) lp.rightMargin = dp(16)
+            linha.addView(cartao(c, idx, c.url in Iptv.favoritos(this)), lp)
+        }
+        return linha
     }
 
     private fun cartao(c: Iptv.Canal, i: Int, fav: Boolean): View {
