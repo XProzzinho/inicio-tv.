@@ -42,8 +42,12 @@ object Iptv {
 
     // ---------- logos dos canais ----------
 
-    fun logo(url: String, cb: (Bitmap?) -> Unit) {
-        logos.get(url)?.let { cb(it); return }
+    fun logo(url: String, cb: (Bitmap?) -> Unit) = logo(url, 200, cb)
+
+    /** Baixa o logo/cartaz reduzido para no máximo [max] px de largura. */
+    fun logo(url: String, max: Int, cb: (Bitmap?) -> Unit) {
+        val chave = "$max|$url"
+        logos.get(chave)?.let { cb(it); return }
         pool.execute {
             val bmp = try {
                 val c = URL(url).openConnection() as HttpURLConnection
@@ -56,13 +60,13 @@ object Iptv {
                 val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
                 var s = 1
-                while (o.outWidth / (s * 2) >= 200 && o.outHeight / (s * 2) >= 120) s *= 2
+                while (o.outWidth / (s * 2) >= max && o.outHeight / (s * 2) >= max * 0.6) s *= 2
                 BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = s })
             } catch (_: Throwable) {
                 null
             }
             main.post {
-                if (bmp != null) logos.put(url, bmp)
+                if (bmp != null) logos.put(chave, bmp)
                 cb(bmp)
             }
         }

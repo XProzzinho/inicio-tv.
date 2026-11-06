@@ -658,7 +658,7 @@ class PlayerActivity : Activity() {
             fun t(x: Long) = "%d:%02d:%02d".format(x / 3600, x / 60 % 60, x % 60)
             faixaNome.text = c.nome
             faixaSub.text = (if (player.playWhenReady) "▶ " else "❚❚ ") + t(pos) + (dur?.let { " / " + t(it) } ?: "") +
-                "  ·  ◀ ▶ 15 s" + (if (fav) "  ·  ★" else "")
+                "  ·  ◀ ▶ 15 s" + (if (lista.size > 1) "  ·  ▲▼ episódio ${indice + 1}/${lista.size}" else "")
         } else {
             faixaNome.text = "${indice + 1}  ${c.nome}"
             faixaSub.text = c.grupo + (if (fav) "  ·  ★ Favorito" else "  ·  Segure OK para favoritar")
@@ -691,7 +691,8 @@ class PlayerActivity : Activity() {
                     return true
                 }
                 KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
-                    mostrarFaixa()
+                    // Série: cima = próximo episódio, baixo = anterior; filme: só mostra o tempo
+                    if (lista.size > 1) trocar(if (keyCode == KeyEvent.KEYCODE_DPAD_UP) 1 else -1) else mostrarFaixa()
                     return true
                 }
                 KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> {
