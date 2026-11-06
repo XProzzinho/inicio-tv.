@@ -63,6 +63,41 @@ object Iptv {
     fun ultimo(ctx: Context): String? = sp(ctx).getString("iptv_ultimo", null)
     fun salvarUltimo(ctx: Context, c: Canal) = sp(ctx).edit().putString("iptv_ultimo", c.url).apply()
 
+    /** Canais que o player percorre com cima/baixo (a lista que estava na tela). */
+    var fila: List<Canal> = emptyList()
+
+    /** Abas da TV ao vivo, na mesma ordem da foto. */
+    val ABAS = listOf("Jogos", "Destaques", "Filmes", "Séries", "Kids", "Anime", "Explorar")
+
+    private val chaves = mapOf(
+        0 to listOf("esporte", "sport", "futebol", "football", "soccer", "premiere", "combate", "ufc", "luta", "nba", "espn", "jogos", "game"),
+        2 to listOf("filme", "movie", "cine", "telecine", "hbo", "megapix", "cinema"),
+        3 to listOf("serie", "series", "novela", "seriado", "warner", "sony", "universal", "axn"),
+        4 to listOf("kid", "infantil", "crianca", "desenho", "cartoon", "disney", "nick", "gloob", "discovery kids", "animation"),
+        5 to listOf("anime", "crunchyroll", "otaku"),
+    )
+
+    private fun semAcento(s: String) =
+        java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD).replace(Regex("\p{Mn}+"), "").lowercase()
+
+    /** Canais de cada aba: separa pelo grupo da lista (e pelo nome do canal). */
+    fun daAba(ctx: Context, aba: Int): List<Canal> = when (aba) {
+        // Destaques: favoritos primeiro, depois os primeiros canais da lista
+        1 -> {
+            val f = favoritos(ctx)
+            val favs = canais.filter { it.url in f }
+            (favs + canais.filter { it.url !in f }.take(40)).distinct()
+        }
+        6 -> canais
+        else -> {
+            val ks = chaves[aba].orEmpty()
+            canais.filter { c ->
+                val g = semAcento(c.grupo)
+                ks.any { g.contains(it) }
+            }
+        }
+    }
+
     /** Grupos na ordem: Favoritos, Todos e depois os da lista. */
     fun grupos(ctx: Context): List<String> {
         val g = canais.map { it.grupo }.filter { it.isNotBlank() }.distinct()

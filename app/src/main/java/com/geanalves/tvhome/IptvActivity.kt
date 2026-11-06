@@ -40,17 +40,21 @@ private fun redondo(cor: Int, raio: Float) = GradientDrawable().apply {
 }
 
 /**
- * TV ao vivo: grupos em pílulas no topo e os canais em cartões brancos,
- * com o mesmo visual do Início TV (preto quando seleciona).
+ * TV ao vivo com o mesmo design da tela inicial do Início TV:
+ * título grande, abas (Jogos, Destaques, Filmes, Séries, Kids, Anime, Explorar),
+ * destaque grande + dois cartões altos, os grupos em blocos e a grade de canais.
  */
 class IptvActivity : Activity() {
 
-    private lateinit var grade: LinearLayout
-    private lateinit var chipsRow: LinearLayout
+    private lateinit var conteudo: LinearLayout
     private lateinit var info: TextView
-    private val chips = ArrayList<TextView>()
-    private var grupoAtual = Iptv.TODOS
+    private lateinit var titulo: TextView
+    private val abas = ArrayList<TextView>()
+    private var abaAtual = 1 // começa em Destaques
+    private var subgrupo: String? = null
     private val colunas = 5
+    private val h = Handler(Looper.getMainLooper())
+    private var girar: Runnable? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,78 +67,116 @@ class IptvActivity : Activity() {
     override fun onResume() {
         super.onResume()
         // Volta do player: atualiza os favoritos
-        if (Iptv.canais.isNotEmpty() && grupoAtual == Iptv.FAVORITOS) mostrarCanais()
+        if (Iptv.canais.isNotEmpty()) mostrar()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        girar?.let { h.removeCallbacks(it) }
     }
 
     private fun montar(): View {
         val root = FrameLayout(this).apply {
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(Cores.fundoTopo, Cores.fundoBase))
         }
-        val col = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(56), dp(32), dp(56), 0)
-            clipChildren = false
-            clipToPadding = false
-        }
-        root.addView(col, FrameLayout.LayoutParams(-1, -1))
-
-        col.addView(TextView(this).apply {
-            text = "TV ao vivo"
-            textSize = 36f
-            setTextColor(Cores.tinta)
-            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-        })
-        info = TextView(this).apply {
-            textSize = 16f
-            setTextColor(Cores.cinza)
-            setPadding(0, dp(2), 0, dp(10))
-            text = "Carregando a lista…"
-        }
-        col.addView(info)
-
-        // Grupos (Favoritos, Todos, Notícias…) em pílulas
-        val chipsScroll = HorizontalScrollView(this).apply {
-            isHorizontalScrollBarEnabled = false
-            clipChildren = false
-            clipToPadding = false
-            setPadding(dp(4), dp(4), dp(4), dp(8))
-        }
-        chipsRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            clipChildren = false
-            clipToPadding = false
-        }
-        chipsScroll.addView(chipsRow)
-        col.addView(chipsScroll, LinearLayout.LayoutParams(-1, -2))
-
         val scroll = ScrollView(this).apply {
             isVerticalScrollBarEnabled = false
             clipChildren = false
             clipToPadding = false
-            setPadding(dp(6), dp(8), dp(6), dp(40))
         }
-        grade = LinearLayout(this).apply {
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(56), dp(32), dp(56), dp(40))
+            clipChildren = false
+            clipToPadding = false
+        }
+        scroll.addView(col)
+        root.addView(scroll, FrameLayout.LayoutParams(-1, -1))
+
+        // Igual à tela inicial: linha pequena cinza + título grande + abas
+        info = TextView(this).apply {
+            textSize = 17f
+            setTextColor(Cores.cinza)
+            text = "TV ao vivo"
+        }
+        col.addView(info)
+        titulo = TextView(this).apply {
+            textSize = 36f
+            setTextColor(Cores.tinta)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            text = "Destaques"
+        }
+        col.addView(titulo)
+        val abasRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, dp(6), 0, dp(18))
+        }
+        Iptv.ABAS.forEachIndexed { i, nome ->
+            val bg = redondo(Color.TRANSPARENT, dpf(20))
+            val t = TextView(this).apply {
+                text = nome
+                textSize = 17f
+                setPadding(dp(14), dp(6), dp(14), dp(6))
+                background = bg
+                isFocusable = true
+                isClickable = true
+                setOnFocusChangeListener { _, has ->
+                    if (has && abaAtual != i) {
+                        abaAtual = i
+                        subgrupo = null
+                        mostrar()
+                    }
+                    pintarAbas()
+                }
+                setOnClickListener {
+                    abaAtual = i
+                    subgrupo = null
+                    mostrar()
+                    pintarAbas()
+                }
+            }
+            abas += t
+            abasRow.addView(t, LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dp(6) })
+        }
+        col.addView(abasRow)
+        pintarAbas()
+
+        conteudo = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             clipChildren = false
             clipToPadding = false
         }
-        scroll.addView(grade)
-        col.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        col.addView(conteudo)
         return root
     }
 
+    /** Mesmas cores das abas da tela inicial: preta selecionada, cinza clarinho na atual. */
+    private fun pintarAbas() {
+        abas.forEachIndexed { i, t ->
+            val bg = t.background as GradientDrawable
+            when {
+                t.isFocused -> {
+                    bg.setColor(Cores.tinta)
+                    t.setTextColor(Cores.papel)
+                }
+                i == abaAtual -> {
+                    bg.setColor(Cores.sutil)
+                    t.setTextColor(Cores.tinta)
+                }
+                else -> {
+                    bg.setColor(Color.TRANSPARENT)
+                    t.setTextColor(Cores.cinza)
+                }
+            }
+        }
+    }
+
     private fun carregar(forcar: Boolean) {
-        info.text = "Carregando a lista…"
+        info.text = "TV ao vivo · carregando a lista…"
         Iptv.carregar(this, forcar) { erro ->
             if (isFinishing) return@carregar
             when (erro) {
-                null -> {
-                    montarChips()
-                    // Começa em Favoritos se tiver algum
-                    grupoAtual = if (Iptv.doGrupo(this, Iptv.FAVORITOS).isNotEmpty()) Iptv.FAVORITOS else Iptv.TODOS
-                    pintarChips()
-                    mostrarCanais()
-                }
+                null -> mostrar()
                 "sem lista" -> vazio(
                     "Nenhuma lista de canais ainda.\n" +
                         "No celular, abra o Controle TV › Administração › TV ao vivo e cole o link da sua lista M3U.",
@@ -145,16 +187,10 @@ class IptvActivity : Activity() {
     }
 
     private fun vazio(msg: String) {
-        info.text = ""
-        chipsRow.removeAllViews()
-        grade.removeAllViews()
-        grade.addView(cartaoTexto(msg) { carregar(true) }, LinearLayout.LayoutParams(-1, -2))
-        grade.getChildAt(0).requestFocus()
-    }
-
-    private fun cartaoTexto(msg: String, acao: () -> Unit): View {
+        info.text = "TV ao vivo"
+        conteudo.removeAllViews()
         val bg = redondo(Cores.janela, dpf(22))
-        return TextView(this).apply {
+        val t = TextView(this).apply {
             text = msg
             textSize = 20f
             setTextColor(Cores.tinta)
@@ -162,83 +198,35 @@ class IptvActivity : Activity() {
             setPadding(dp(28), dp(24), dp(28), dp(24))
             isFocusable = true
             isClickable = true
-            setOnClickListener { acao() }
+            setOnClickListener { carregar(true) }
         }
+        conteudo.addView(t, LinearLayout.LayoutParams(-1, -2))
     }
 
-    // ---------- grupos ----------
-
-    private fun montarChips() {
-        chipsRow.removeAllViews()
-        chips.clear()
-        for (g in Iptv.grupos(this)) {
-            val bg = redondo(Color.TRANSPARENT, dpf(20))
-            val t = TextView(this).apply {
-                text = g
-                textSize = 19f
-                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                setPadding(dp(18), dp(8), dp(18), dp(8))
-                background = bg
-                isFocusable = true
-                isClickable = true
-                tag = g
-                setOnFocusChangeListener { _, has ->
-                    if (has && grupoAtual != g) {
-                        grupoAtual = g
-                        mostrarCanais()
-                    }
-                    pintarChips()
-                }
-                setOnClickListener {
-                    grupoAtual = g
-                    mostrarCanais()
-                    pintarChips()
-                }
-            }
-            chips += t
-            val lp = LinearLayout.LayoutParams(-2, -2)
-            lp.rightMargin = dp(6)
-            chipsRow.addView(t, lp)
-        }
+    private fun secao(texto: String) = TextView(this).apply {
+        text = texto
+        textSize = 20f
+        setTextColor(Cores.tinta)
+        typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        setPadding(dp(2), dp(4), 0, dp(12))
     }
 
-    private fun pintarChips() {
-        for (t in chips) {
-            val bg = t.background as GradientDrawable
-            when {
-                t.isFocused -> {
-                    bg.setStroke(0, Color.TRANSPARENT)
-                    bg.setColor(Cores.tinta)
-                    t.setTextColor(Cores.papel)
-                }
-                t.tag == grupoAtual -> {
-                    // Aba escolhida: contorno arredondado (como na foto)
-                    bg.setColor(Color.TRANSPARENT)
-                    bg.setStroke(dp(2), Cores.tinta)
-                    t.setTextColor(Cores.tinta)
-                }
-                else -> {
-                    bg.setStroke(0, Color.TRANSPARENT)
-                    bg.setColor(Color.TRANSPARENT)
-                    t.setTextColor(Cores.cinza)
-                }
-            }
-        }
-    }
+    // ---------- conteúdo da aba ----------
 
-    // ---------- canais ----------
-
-    private fun mostrarCanais() {
-        grade.removeAllViews()
-        val lista = Iptv.doGrupo(this, grupoAtual)
-        info.text = "${Iptv.canais.size} canais · $grupoAtual: ${lista.size}"
-        if (lista.isEmpty()) {
-            grade.addView(
+    private fun mostrar() {
+        girar?.let { h.removeCallbacks(it) }
+        conteudo.removeAllViews()
+        val nomeAba = Iptv.ABAS[abaAtual]
+        titulo.text = nomeAba
+        val daAba = Iptv.daAba(this, abaAtual)
+        info.text = "TV ao vivo · ${Iptv.canais.size} canais"
+        if (daAba.isEmpty()) {
+            conteudo.addView(
                 TextView(this).apply {
-                    text = if (grupoAtual == Iptv.FAVORITOS) {
-                        "Sem favoritos. Assistindo um canal, segure OK para favoritar."
+                    text = if (abaAtual == 1) {
+                        "Assistindo um canal, segure OK para ele aparecer aqui nos Destaques."
                     } else {
-                        "Nenhum canal aqui."
+                        "Sua lista não tem canais de $nomeAba."
                     }
                     textSize = 18f
                     setTextColor(Cores.cinza)
@@ -246,23 +234,41 @@ class IptvActivity : Activity() {
             )
             return
         }
-        val favs = Iptv.favoritos(this)
-        val larg = (resources.displayMetrics.widthPixels - dp(112 + 12) - dp(16) * (colunas - 1)) / colunas
-        // Topo separado: destaque grande que passa sozinho + dois cartões altos do lado
-        if (lista.size >= 3) {
-            grade.addView(linhaDestaque(lista), LinearLayout.LayoutParams(-1, dp(250)).apply { bottomMargin = dp(22) })
-            grade.addView(
-                TextView(this).apply {
-                    text = "Todos os canais"
-                    textSize = 20f
-                    setTextColor(Cores.tinta)
-                    typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-                    setPadding(dp(2), 0, 0, dp(12))
-                },
-            )
+
+        // 1) Destaque grande + dois cartões altos
+        if (daAba.size >= 3) {
+            conteudo.addView(linhaDestaque(daAba), LinearLayout.LayoutParams(-1, dp(250)).apply { bottomMargin = dp(24) })
         }
+
+        // 2) Os grupos da lista dentro desta aba, em blocos (como Gênero, Nacional, No ar)
+        val grupos = daAba.map { it.grupo }.distinct()
+        if (grupos.size > 1) {
+            conteudo.addView(secao("Categorias"))
+            val hs = HorizontalScrollView(this).apply {
+                isHorizontalScrollBarEnabled = false
+                clipChildren = false
+                clipToPadding = false
+                setPadding(dp(4), dp(4), dp(4), dp(8))
+            }
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                clipChildren = false
+                clipToPadding = false
+            }
+            hs.addView(row)
+            (listOf<String?>(null) + grupos).forEach { g ->
+                row.addView(blocoGrupo(g, daAba.count { g == null || it.grupo == g }), LinearLayout.LayoutParams(dp(170), dp(84)).apply { rightMargin = dp(14) })
+            }
+            conteudo.addView(hs, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
+        }
+
+        // 3) Grade com os canais (do grupo escolhido ou todos da aba)
+        val lista = if (subgrupo == null) daAba else daAba.filter { it.grupo == subgrupo }
+        Iptv.fila = lista
+        conteudo.addView(secao((subgrupo ?: "Todos os canais") + " · ${lista.size}"))
+        val favs = Iptv.favoritos(this)
+        val larg = (resources.displayMetrics.widthPixels - dp(112) - dp(16) * (colunas - 1)) / colunas
         var linha: LinearLayout? = null
-        // Até 600 canais por grupo para não pesar a TV
         lista.take(600).forEachIndexed { i, c ->
             if (i % colunas == 0) {
                 linha = LinearLayout(this).apply {
@@ -270,22 +276,52 @@ class IptvActivity : Activity() {
                     clipChildren = false
                     clipToPadding = false
                 }
-                grade.addView(linha, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
+                conteudo.addView(linha, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(16) })
             }
             val lp = LinearLayout.LayoutParams(larg, (larg * 0.72f).toInt())
             if (i % colunas != colunas - 1) lp.rightMargin = dp(16)
-            linha!!.addView(cartao(c, i, c.url in favs), lp)
+            linha!!.addView(cartao(c, lista, i, c.url in favs), lp)
         }
     }
 
-    // ---------- destaque ----------
-
-    private val h = Handler(Looper.getMainLooper())
-    private var girar: Runnable? = null
-
-    override fun onPause() {
-        super.onPause()
-        girar?.let { h.removeCallbacks(it) }
+    /** Bloco de categoria: branco com o nome e a quantidade; o escolhido fica com contorno. */
+    private fun blocoGrupo(g: String?, qtd: Int): View {
+        val escolhido = g == subgrupo
+        val bg = redondo(Cores.janela, dpf(18)).apply { if (escolhido) setStroke(dp(2), Cores.tinta) }
+        val nome = TextView(this).apply {
+            text = g ?: "Tudo"
+            textSize = 16f
+            setTextColor(Cores.tinta)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+        }
+        val num = TextView(this).apply {
+            text = "$qtd canais"
+            textSize = 13f
+            setTextColor(Cores.cinza)
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_VERTICAL
+            background = bg
+            elevation = dpf(2)
+            setPadding(dp(16), 0, dp(12), 0)
+            isFocusable = true
+            isClickable = true
+            addView(nome)
+            addView(num)
+            setOnClickListener {
+                subgrupo = g
+                mostrar()
+            }
+            setOnFocusChangeListener { v, has ->
+                bg.setColor(if (has) Cores.tinta else Cores.janela)
+                nome.setTextColor(if (has) Cores.papel else Cores.tinta)
+                num.setTextColor(if (has) Cores.papel else Cores.cinza)
+                v.animate().scaleX(if (has) 1.05f else 1f).scaleY(if (has) 1.05f else 1f).setDuration(120).start()
+            }
+        }
     }
 
     /** Destaque grande (passa entre os 4 primeiros canais) e dois cartões altos à direita. */
@@ -297,7 +333,6 @@ class IptvActivity : Activity() {
         }
         val roda = lista.take(4)
         var atual = 0
-
         val bg = redondo(Cores.janela, dpf(22))
         val anel = GradientDrawable().apply {
             cornerRadius = dpf(22)
@@ -334,12 +369,9 @@ class IptvActivity : Activity() {
             setTextColor(Cores.cinza)
             setPadding(0, dp(14), 0, 0)
         }
-        // Pontinhos embaixo: qual dos 4 está aparecendo
         val pontos = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val bolinhas = roda.map {
-            View(this).also { v ->
-                pontos.addView(v, LinearLayout.LayoutParams(dp(8), dp(8)).apply { rightMargin = dp(6) })
-            }
+            View(this).also { v -> pontos.addView(v, LinearLayout.LayoutParams(dp(8), dp(8)).apply { rightMargin = dp(6) }) }
         }
         val textos = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -365,8 +397,7 @@ class IptvActivity : Activity() {
             addView(corpo, FrameLayout.LayoutParams(-1, -1))
             addView(pontos, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.END))
         }
-
-        fun mostrar(i: Int) {
+        fun mostrarDestaque(i: Int) {
             atual = i
             val c = roda[i]
             nome.text = c.nome
@@ -380,52 +411,38 @@ class IptvActivity : Activity() {
                 }
             }
         }
-        mostrar(0)
-
-        // Passa para o próximo a cada 6 segundos (para enquanto estiver selecionado)
-        girar?.let { h.removeCallbacks(it) }
+        mostrarDestaque(0)
+        // Passa sozinho a cada 6 segundos (para enquanto estiver selecionado)
         val r = object : Runnable {
             override fun run() {
-                if (!destaque.isFocused && roda.size > 1) mostrar((atual + 1) % roda.size)
+                if (!destaque.isFocused && roda.size > 1) mostrarDestaque((atual + 1) % roda.size)
                 h.postDelayed(this, 6000)
             }
         }
         girar = r
         h.postDelayed(r, 6000)
-
         destaque.setOnClickListener {
-            startActivity(
-                Intent(this, PlayerActivity::class.java).putExtra("grupo", grupoAtual).putExtra("indice", atual),
-            )
+            Iptv.fila = lista
+            startActivity(Intent(this, PlayerActivity::class.java).putExtra("indice", atual))
         }
         destaque.setOnFocusChangeListener { v, has ->
             anel.setStroke(if (has) dp(4) else 0, Cores.tinta)
             v.animate().scaleX(if (has) 1.02f else 1f).scaleY(if (has) 1.02f else 1f)
                 .translationZ(if (has) dpf(8) else 0f).setDuration(140).start()
         }
-        // Esquerda/direita no destaque também trocam o canal mostrado
-        destaque.setOnKeyListener { _, code, ev ->
-            if (ev.action == KeyEvent.ACTION_DOWN && code == KeyEvent.KEYCODE_DPAD_LEFT && atual > 0) {
-                mostrar(atual - 1)
-                true
-            } else {
-                false
-            }
-        }
-
         linha.addView(destaque, LinearLayout.LayoutParams(0, -1, 2.2f).apply { rightMargin = dp(16) })
-        // Dois cartões altos: os canais 5 e 6 (ou os seguintes que existirem)
+        // Dois cartões altos ao lado
         val altos = lista.drop(4).take(2).ifEmpty { lista.drop(1).take(2) }
+        val favs = Iptv.favoritos(this)
         altos.forEachIndexed { k, c ->
-            val idx = lista.indexOf(c)
             val lp = LinearLayout.LayoutParams(0, -1, 1f)
             if (k == 0) lp.rightMargin = dp(16)
-            linha.addView(cartao(c, idx, c.url in Iptv.favoritos(this)), lp)
+            linha.addView(cartao(c, lista, lista.indexOf(c), c.url in favs), lp)
         }
         return linha
     }
 
-    private fun cartao(c: Iptv.Canal, i: Int, fav: Boolean): View {
+    private fun cartao(c: Iptv.Canal, lista: List<Iptv.Canal>, i: Int, fav: Boolean): View {
         val bg = redondo(Cores.janela, dpf(18))
         val anel = GradientDrawable().apply {
             cornerRadius = dpf(18)
@@ -465,11 +482,8 @@ class IptvActivity : Activity() {
             addView(topo, LinearLayout.LayoutParams(-1, 0, 1f))
             addView(nome)
             setOnClickListener {
-                startActivity(
-                    Intent(this@IptvActivity, PlayerActivity::class.java)
-                        .putExtra("grupo", grupoAtual)
-                        .putExtra("indice", i),
-                )
+                Iptv.fila = lista
+                startActivity(Intent(this@IptvActivity, PlayerActivity::class.java).putExtra("indice", i))
             }
             setOnFocusChangeListener { v, has ->
                 anel.setStroke(if (has) dp(4) else 0, Cores.tinta)
@@ -509,7 +523,7 @@ class PlayerActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        lista = Iptv.doGrupo(this, intent.getStringExtra("grupo") ?: Iptv.TODOS)
+        lista = Iptv.fila.ifEmpty { Iptv.canais }
         indice = intent.getIntExtra("indice", 0)
         if (lista.isEmpty()) {
             finish()
