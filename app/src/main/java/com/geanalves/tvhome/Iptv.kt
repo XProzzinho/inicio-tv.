@@ -37,6 +37,11 @@ object Iptv {
         override fun sizeOf(key: String, value: Bitmap) = value.byteCount
     }
 
+    /** "Round 6 S01 E03" → "Round 6" (para juntar os episódios da mesma série). */
+    fun nomeSerie(n: String): String =
+        n.replace(Regex("""\s*[-–|:]?\s*(S\d{1,2}\s*E\d{1,3}|T\d{1,2}\s*E\d{1,3}|\d{1,2}x\d{1,3}|Temporada\s*\d+.*|Ep(is[oó]dio)?\.?\s*\d+).*$""", RegexOption.IGNORE_CASE), "")
+            .trim().ifBlank { n }
+
     internal fun semAcento(s: String) =
         java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFD).replace(Regex("\\p{Mn}+"), "").lowercase()
 

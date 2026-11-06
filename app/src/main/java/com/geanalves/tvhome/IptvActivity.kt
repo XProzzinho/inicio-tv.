@@ -57,12 +57,28 @@ class IptvActivity : Activity() {
     private val colunas = 5
     private val h = Handler(Looper.getMainLooper())
     private var girar: Runnable? = null
+    private var episodios: Map<String, List<Iptv.Canal>> = emptyMap()
+
+    /** O que o player vai tocar: os episódios da série ou a lista da tela. */
+    private fun abrir(lista: List<Iptv.Canal>, i: Int) {
+        val c = lista[i]
+        val eps = episodios[c.nome]
+        if (eps != null) {
+            Iptv.fila = eps
+            startActivity(Intent(this, PlayerActivity::class.java).putExtra("indice", 0).putExtra("vod", true))
+        } else {
+            // Filme: só ele (cima/baixo não trocam de filme sem querer)
+            Iptv.fila = if (ehVod) listOf(c) else lista
+            startActivity(Intent(this, PlayerActivity::class.java).putExtra("indice", if (ehVod) 0 else i).putExtra("vod", ehVod))
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Cores.manual = getSharedPreferences("inicio", MODE_PRIVATE).getBoolean("modo_escuro", false)
         Cores.atualizar()
         Iptv.atual = if (intent.getStringExtra("modo") == "vod") Iptv.vod else Iptv.aoVivo
+        abaAtual = intent.getIntExtra("aba", 0).coerceIn(0, Iptv.atual.abas.size - 1)
         setContentView(montar())
         carregar(false)
     }
@@ -108,7 +124,7 @@ class IptvActivity : Activity() {
             textSize = 36f
             setTextColor(Cores.tinta)
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            text = Iptv.atual.abas[0]
+            text = Iptv.atual.abas[abaAtual]
         }
         col.addView(titulo)
         val abasRow = LinearLayout(this).apply {
@@ -223,7 +239,14 @@ class IptvActivity : Activity() {
         conteudo.removeAllViews()
         val nomeAba = Iptv.atual.abas[abaAtual]
         titulo.text = nomeAba
-        val daAba = Iptv.atual.daAba(this, abaAtual)
+        val brutos = Iptv.atual.daAba(this, abaAtual)
+        // Séries: cada série aparece uma vez (o cartão toca os episódios dela)
+        episodios = if (ehVod && abaAtual == 1) brutos.groupBy { Iptv.nomeSerie(it.nome) } else emptyMap()
+        val daAba = if (episodios.isNotEmpty()) {
+            episodios.map { (nome, eps) -> eps.first().copy(nome = nome) }
+        } else {
+            brutos
+        }
         info.text = "$nomeTela · ${Iptv.atual.canais.size} " + if (ehVod) "títulos" else "canais"
         if (daAba.isEmpty()) {
             conteudo.addView(
@@ -432,10 +455,7 @@ class IptvActivity : Activity() {
         }
         girar = r
         h.postDelayed(r, 6000)
-        destaque.setOnClickListener {
-            Iptv.fila = lista
-            startActivity(Intent(this, PlayerActivity::class.java).putExtra("indice", atual).putExtra("vod", ehVod))
-        }
+        destaque.setOnClickListener { abrir(lista, atual) }
         destaque.setOnFocusChangeListener { v, has ->
             anel.setStroke(if (has) dp(4) else 0, Cores.tinta)
             v.animate().scaleX(if (has) 1.02f else 1f).scaleY(if (has) 1.02f else 1f)
@@ -503,10 +523,7 @@ class IptvActivity : Activity() {
             isClickable = true
             addView(topo, LinearLayout.LayoutParams(-1, 0, 1f))
             addView(nome)
-            setOnClickListener {
-                Iptv.fila = lista
-                startActivity(Intent(this@IptvActivity, PlayerActivity::class.java).putExtra("indice", i).putExtra("vod", ehVod))
-            }
+            setOnClickListener { abrir(lista, i) }
             setOnFocusChangeListener { v, has ->
                 anel.setStroke(if (has) dp(4) else 0, Cores.tinta)
                 v.animate().scaleX(if (has) 1.06f else 1f).scaleY(if (has) 1.06f else 1f)

@@ -697,7 +697,18 @@ class MainActivity : Activity() {
                 if (has) selectTab(index)
                 styleTabs()
             }
-            setOnClickListener { selectTab(index) }
+            setOnClickListener {
+                // Filmes / Séries com lista: clicar abre a tela da lista
+                if ((index == 1 || index == 2) && Iptv.vod.link(this@MainActivity) != null) {
+                    startActivity(
+                        Intent(this@MainActivity, IptvActivity::class.java)
+                            .putExtra("modo", "vod")
+                            .putExtra("aba", index - 1),
+                    )
+                } else {
+                    selectTab(index)
+                }
+            }
         }
 
     private fun styleTabs() {
@@ -827,10 +838,8 @@ class MainActivity : Activity() {
         }
     }
 
-    /** "Round 6 S01 E03" → "Round 6" (para juntar os episódios da mesma série). */
-    private fun nomeSerie(n: String): String =
-        n.replace(Regex("""\s*[-–|:]?\s*(S\d{1,2}\s*E\d{1,3}|T\d{1,2}\s*E\d{1,3}|\d{1,2}x\d{1,3}|Temporada\s*\d+.*|Ep(is[oó]dio)?\.?\s*\d+).*$""", RegexOption.IGNORE_CASE), "")
-            .trim().ifBlank { n }
+    private fun nomeSerie(n: String): String = Iptv.nomeSerie(n)
+
 
     private fun carregarTmdb(token: Int, force: Boolean, aviso: String?) {
         if (!Tmdb.enabled) {
