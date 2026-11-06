@@ -551,7 +551,7 @@ class MainActivity : Activity() {
             return
         }
         if (!force) status("Carregando…")
-        Tmdb.list(currentTab) { items ->
+        Tmdb.list(currentTab, infantil = prefs.crianca(prefs.perfil)) { items ->
             if (token != loadToken) return@list
             if (items.isEmpty()) {
                 showCards(fallbackCards(), "Sem conexão com o TMDB agora · mostrando seus apps")
@@ -1214,9 +1214,12 @@ class MainActivity : Activity() {
                 clipToPadding = false
                 setPadding(dp(12), dp(8), dp(12), dp(8))
                 setOnClickListener {
+                    val mudouTipo = prefs.crianca(i) != prefs.crianca(prefs.perfil)
                     prefs.perfil = i
                     refreshProfile()
                     refreshApps()
+                    // Trocou entre adulto e criança: troca os cartazes também
+                    if (mudouTipo) loadCards(force = true)
                     d.dismiss()
                 }
                 setOnFocusChangeListener { _, has ->
@@ -1483,7 +1486,7 @@ class MainActivity : Activity() {
         saver.visibility = View.VISIBLE
         saver.animate().alpha(1f).setDuration(600).start()
         if (Tmdb.enabled) {
-            Tmdb.list(0) { items ->
+            Tmdb.list(0, infantil = prefs.crianca(prefs.perfil)) { items ->
                 saverItems = items
                 handler.removeCallbacks(saverNext)
                 handler.post(saverNext)
