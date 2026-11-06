@@ -151,6 +151,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         handler.postDelayed({ if (!isFinishing) offerVolumeService() }, 1500)
         super.onResume()
+        Brilho.restaurar(this)
         startMeter()
         buildDock()
         handler.removeCallbacks(tick)
