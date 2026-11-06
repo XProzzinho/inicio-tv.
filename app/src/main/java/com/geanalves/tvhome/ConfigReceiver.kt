@@ -30,6 +30,28 @@ class ConfigReceiver : BroadcastReceiver() {
             }
             resultData = if (chave.isBlank()) "removida" else "salva"
         }
+        // Lembretes: --es lembrete "texto" --ei perfil 1 --es data 2026-11-07
+        intent.getStringExtra("lembrete")?.let { texto ->
+            val data = intent.getStringExtra("data") ?: return@let
+            Lembretes.adicionar(app, texto, intent.getIntExtra("perfil", 0), data)
+            Handler(Looper.getMainLooper()).post { Lembretes.aoMudar?.invoke() }
+            resultData = "ok"
+        }
+        // --es apagar_lembrete ID
+        intent.getStringExtra("apagar_lembrete")?.toLongOrNull()?.let { id ->
+            Lembretes.apagar(app, id)
+            Handler(Looper.getMainLooper()).post { Lembretes.aoMudar?.invoke() }
+            resultData = "ok"
+        }
+        // --ez lembretes true: devolve os perfis e a lista
+        if (intent.getBooleanExtra("lembretes", false)) {
+            val p = Prefs(app)
+            val nomes = (0 until Prefs.PERFIS).joinToString("|") { p.nome(it) }
+            resultData = android.util.Base64.encodeToString(
+                (nomes + "\n" + Lembretes.exportar(app)).toByteArray(),
+                android.util.Base64.NO_WRAP,
+            )
+        }
         intent.getStringExtra("icones")?.let { lista ->
             resultData = salvarIcones(app, lista.split(',').map { it.trim() }.filter { it.isNotBlank() })
         }

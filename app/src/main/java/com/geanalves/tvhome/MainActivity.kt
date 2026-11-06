@@ -55,6 +55,18 @@ class MainActivity : Activity() {
     private lateinit var clock: TextView
     private lateinit var weatherText: TextView
     private lateinit var dateText: TextView
+    private lateinit var lembreteText: TextView
+
+    private fun mostrarLembretes() {
+        if (!::lembreteText.isInitialized) return
+        val lista = Lembretes.doPerfil(this, prefs.perfil).take(3)
+        if (lista.isEmpty()) {
+            lembreteText.visibility = View.GONE
+            return
+        }
+        lembreteText.text = lista.joinToString("\n") { "● ${it.texto} · ${Lembretes.quando(it.data)}" }
+        lembreteText.visibility = View.VISIBLE
+    }
     private val dateFmt = SimpleDateFormat("EEE, d 'de' MMMM", Locale("pt", "BR"))
 
     /** Fonte de serifa do relógio (Playfair Display, baixada na compilação); senão a serifa do Android. */
@@ -109,6 +121,7 @@ class MainActivity : Activity() {
             }
             clock.text = timeFmt.format(Date())
             dateText.text = dateFmt.format(Date())
+            mostrarLembretes()
             greeting.text = saudacao()
             if (saver.visibility == View.VISIBLE) saverClock.text = clock.text
             Weather.now { t -> weatherText.text = t ?: "" }
@@ -141,6 +154,7 @@ class MainActivity : Activity() {
         Cores.manual = prefs.escuro
         Tmdb.carregarChave(this)
         Tmdb.aoMudarChave = { if (!isFinishing) loadCards(force = true) }
+        Lembretes.aoMudar = { if (!isFinishing) mostrarLembretes() }
         val dm = resources.displayMetrics
         cardH = (dm.heightPixels * 0.36f).toInt()
         wideW = cardH * 16 / 9
@@ -510,6 +524,17 @@ class MainActivity : Activity() {
         clockCol.addView(clock, LinearLayout.LayoutParams(WRAP, WRAP))
         clockCol.addView(dateText, LinearLayout.LayoutParams(WRAP, WRAP))
         clockCol.addView(weatherText, LinearLayout.LayoutParams(WRAP, WRAP))
+        // Lembretes do perfil, pequenos embaixo do relógio
+        lembreteText = TextView(this).apply {
+            textSize = 15f
+            setTextColor(INK)
+            gravity = Gravity.END
+            maxLines = 3
+            setPadding(dp(12), dp(4), dp(12), dp(4))
+            background = rounded(0x26FF9500, 12)
+            visibility = View.GONE
+        }
+        clockCol.addView(lembreteText, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(6) })
         val clp = LinearLayout.LayoutParams(WRAP, WRAP)
         clp.rightMargin = dp(8)
         top.addView(clockCol, clp)
@@ -1356,6 +1381,7 @@ class MainActivity : Activity() {
                     val mudouTipo = prefs.crianca(i) != prefs.crianca(prefs.perfil)
                     prefs.perfil = i
                     refreshProfile()
+                    mostrarLembretes()
                     refreshApps()
                     // Trocou entre adulto e criança: troca os cartazes também
                     if (mudouTipo) loadCards(force = true)
