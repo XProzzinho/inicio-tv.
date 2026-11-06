@@ -1490,7 +1490,6 @@ class MainActivity : Activity() {
 
     // ---------- medidor de FPS no canto de baixo ----------
 
-    private lateinit var meterText: TextView
     private lateinit var meterDot: GradientDrawable
     private var meterOn = false
     private var frames = 0
@@ -1510,12 +1509,11 @@ class MainActivity : Activity() {
             val fps = Math.round(frames / secs)
             lastT = now
             frames = 0
-            meterText.text = fps.toString()
-            // Verde = liso, amarelo = médio, vermelho = travando
+            // Verde = liso, laranja = médio, vermelho = travando
             meterDot.setColor(
                 when {
                     fps >= 50 -> 0xFF34C759.toInt()
-                    fps >= 30 -> 0xFFFFCC00.toInt()
+                    fps >= 30 -> 0xFFFF9500.toInt()
                     else -> 0xFFFF3B30.toInt()
                 },
             )
@@ -1523,43 +1521,20 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Só um pontinho no canto de baixo, abaixo da barra de apps. */
     private fun buildMeter() {
-        val pill = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = rounded(Cores.janela, 20)
-            elevation = dpf(3)
-            setPadding(dp(12), dp(6), dp(14), dp(6))
-        }
         meterDot = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             setColor(0xFF34C759.toInt())
         }
-        pill.addView(View(this).apply { background = meterDot }, LinearLayout.LayoutParams(dp(8), dp(8)))
-        meterText = TextView(this).apply {
-            text = "--"
-            textSize = 15f
-            setTextColor(INK)
-            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            setPadding(dp(8), 0, dp(4), 0)
-            includeFontPadding = false
-            minEms = 1
+        val dot = View(this).apply {
+            background = meterDot
+            elevation = dpf(1)
         }
-        pill.addView(meterText)
-        pill.addView(
-            TextView(this).apply {
-                text = "FPS"
-                textSize = 10f
-                setTextColor(GRAY)
-                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-                letterSpacing = 0.08f
-                includeFontPadding = false
-            },
-        )
-        val lp = FrameLayout.LayoutParams(WRAP, WRAP, Gravity.BOTTOM or Gravity.END)
-        lp.marginEnd = dp(20)
-        lp.bottomMargin = dp(8)
-        addContentView(pill, lp)
+        val lp = FrameLayout.LayoutParams(dp(9), dp(9), Gravity.BOTTOM or Gravity.END)
+        lp.marginEnd = dp(24)
+        lp.bottomMargin = dp(9)
+        addContentView(dot, lp)
     }
 
     private fun startMeter() {
