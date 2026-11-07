@@ -668,8 +668,8 @@ class MainActivity : Activity() {
     private fun makeTab(label: String, index: Int): TextView =
         TextView(this).apply {
             text = label
-            textSize = 17f
-            setPadding(dp(14), dp(6), dp(14), dp(6))
+            textSize = 22f
+            setPadding(dp(18), dp(8), dp(18), dp(8))
             isFocusable = true
             isClickable = true
             setOnFocusChangeListener { _, has ->
