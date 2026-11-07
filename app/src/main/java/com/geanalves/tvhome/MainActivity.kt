@@ -164,7 +164,7 @@ class MainActivity : Activity() {
         Tmdb.aoMudarChave = { if (!isFinishing) loadCards(force = true) }
         Lembretes.aoMudar = { if (!isFinishing) mostrarLembretes() }
         val dm = resources.displayMetrics
-        cardH = (dm.heightPixels * 0.36f).toInt()
+        cardH = (dm.heightPixels * 0.34f).toInt()
         wideW = cardH * 16 / 9
         narrowW = (cardH * 0.78f).toInt()
         // Dois cartazes grandes + um pequeno cabendo na largura da tela
@@ -490,14 +490,6 @@ class MainActivity : Activity() {
         }
         profileRow.addView(greeting)
         left.addView(profileRow)
-        left.addView(
-            TextView(this).apply {
-                text = "Para você"
-                textSize = 36f
-                setTextColor(INK)
-                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            },
-        )
         val tabRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, dp(6), 0, 0)
@@ -612,10 +604,11 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             clipChildren = false
             clipToPadding = false
-            setPadding(0, dp(26), resources.displayMetrics.widthPixels, dp(8))
+            setPadding(0, dp(18), resources.displayMetrics.widthPixels, dp(18))
         }
-        cardsScroll.addView(cardsRow, FrameLayout.LayoutParams(WRAP, MATCH))
-        cardsArea.addView(cardsScroll, FrameLayout.LayoutParams(MATCH, MATCH))
+        cardsScroll.addView(cardsRow, FrameLayout.LayoutParams(WRAP, WRAP))
+        // Cartazes no meio do espaço entre as abas e a barra de apps (nomes sem cortar)
+        cardsArea.addView(cardsScroll, FrameLayout.LayoutParams(MATCH, WRAP, Gravity.CENTER_VERTICAL))
         statusText = TextView(this).apply {
             textSize = 15f
             setTextColor(GRAY)
