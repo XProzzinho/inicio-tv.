@@ -482,17 +482,17 @@ class MainActivity : Activity() {
                 v.animate().scaleX(if (has) 1.15f else 1f).scaleY(if (has) 1.15f else 1f).setDuration(120).start()
             }
         }
-        profileRow.addView(avatarText, LinearLayout.LayoutParams(dp(36), dp(36)))
+        // Bolinha do perfil do lado das abas
+        profileRow.addView(avatarText, LinearLayout.LayoutParams(dp(46), dp(46)).apply { rightMargin = dp(10) })
+        // "Boa noite, Geanderson" embaixo das abas, um pouco maior
         greeting = TextView(this).apply {
-            textSize = 18f
+            textSize = 22f
             setTextColor(GRAY)
-            setPadding(dp(12), 0, 0, 0)
+            setPadding(dp(8), dp(10), 0, 0)
         }
-        profileRow.addView(greeting)
-        left.addView(profileRow)
         val tabRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, dp(6), 0, 0)
+            gravity = Gravity.CENTER_VERTICAL
         }
         listOf("Explorar", "Filmes", "Séries", "Continuar").forEachIndexed { i, s ->
             val t = makeTab(s, i)
@@ -517,7 +517,9 @@ class MainActivity : Activity() {
             clipToPadding = false
             addView(tabFrame)
         }
-        left.addView(tabScroll)
+        profileRow.addView(tabScroll, LinearLayout.LayoutParams(0, WRAP, 1f))
+        left.addView(profileRow)
+        left.addView(greeting)
         top.addView(left, LinearLayout.LayoutParams(0, WRAP, 1f))
 
         // Relógio grande com o clima de Pirapora embaixo
