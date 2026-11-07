@@ -127,7 +127,7 @@ class MainActivity : Activity() {
                 recreate()
                 return
             }
-            clock.text = timeFmt.format(Date())
+            trocarHora(timeFmt.format(Date()))
             dateText.text = dateFmt.format(Date())
             mostrarLembretes()
             greeting.text = saudacao()
@@ -355,6 +355,24 @@ class MainActivity : Activity() {
         recreate()
     }
 
+    /** Relógio vivo: a hora velha sobe e some, a nova chega de baixo (animação 6). */
+    private fun trocarHora(nova: String) {
+        if (clock.text.toString() == nova) return
+        if (clock.text.isNullOrEmpty() || clock.height == 0) {
+            clock.text = nova
+            return
+        }
+        val h = clock.height * 0.45f
+        clock.animate().translationY(-h).alpha(0f).setDuration(200)
+            .setInterpolator(android.view.animation.AccelerateInterpolator())
+            .withEndAction {
+                clock.text = nova
+                clock.translationY = h
+                clock.animate().translationY(0f).alpha(1f).setDuration(320)
+                    .setInterpolator(android.view.animation.DecelerateInterpolator(1.5f)).start()
+            }.start()
+    }
+
     private fun goHome() {
         if (looping) {
             // Volta para o começo da fileira infinita
@@ -491,12 +509,21 @@ class MainActivity : Activity() {
             lp.rightMargin = dp(6)
             tabRow.addView(t, lp)
         }
+        // Pílula que escorrega por trás das abas (animação 4)
+        tabPill = View(this).apply { background = tabPillBg }
+        val tabFrame = FrameLayout(this).apply {
+            clipChildren = false
+            clipToPadding = false
+            addView(tabPill, FrameLayout.LayoutParams(0, 0))
+            addView(tabRow)
+        }
+        tabRow.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> styleTabs(animar = false) }
         // As abas cabem numa faixa que rola para o lado se faltar espaço
         val tabScroll = android.widget.HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             clipChildren = false
             clipToPadding = false
-            addView(tabRow)
+            addView(tabFrame)
         }
         left.addView(tabScroll)
         top.addView(left, LinearLayout.LayoutParams(0, WRAP, 1f))
@@ -631,7 +658,6 @@ class MainActivity : Activity() {
             setPadding(dp(14), dp(6), dp(14), dp(6))
             isFocusable = true
             isClickable = true
-            background = rounded(Color.TRANSPARENT, 20)
             setOnFocusChangeListener { _, has ->
                 if (has) selectTab(index)
                 styleTabs()
@@ -639,24 +665,59 @@ class MainActivity : Activity() {
             setOnClickListener { selectTab(index) }
         }
 
-    private fun styleTabs() {
+    private lateinit var tabPill: View
+    private val tabPillBg = GradientDrawable().apply { cornerRadius = 1000f }
+    private var pillCor = Color.TRANSPARENT
+    private var pillAnim: android.animation.ValueAnimator? = null
+
+    /** A pílula preta (selecionada) ou cinza clarinha (aba atual) escorrega até a aba certa. */
+    private fun styleTabs(animar: Boolean = true) {
+        var alvo: TextView? = null
+        var corAlvo = Cores.sutil
         tabs.forEachIndexed { i, t ->
-            val bg = t.background as GradientDrawable
             when {
                 t.isFocused -> {
-                    bg.setColor(INK)
                     t.setTextColor(Cores.papel)
+                    alvo = t
+                    corAlvo = INK
                 }
-                i == currentTab -> {
-                    bg.setColor(Cores.sutil)
-                    t.setTextColor(INK)
-                }
-                else -> {
-                    bg.setColor(Color.TRANSPARENT)
-                    t.setTextColor(GRAY)
-                }
+                i == currentTab -> t.setTextColor(INK)
+                else -> t.setTextColor(GRAY)
             }
             t.typeface = if (i == currentTab) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        }
+        val t = alvo ?: tabs.getOrNull(currentTab) ?: return
+        if (!::tabPill.isInitialized || t.width == 0) return
+        val lp = tabPill.layoutParams as FrameLayout.LayoutParams
+        val x0 = tabPill.translationX
+        val w0 = lp.width.toFloat()
+        val c0 = pillCor
+        val x1 = t.left.toFloat()
+        val w1 = t.width.toFloat()
+        lp.height = t.height
+        lp.topMargin = t.top
+        pillAnim?.cancel()
+        if (!animar || w0 == 0f) {
+            tabPill.translationX = x1
+            lp.width = t.width
+            tabPill.layoutParams = lp
+            pillCor = corAlvo
+            tabPillBg.setColor(corAlvo)
+            return
+        }
+        val cores = android.animation.ArgbEvaluator()
+        pillAnim = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 280
+            interpolator = android.view.animation.DecelerateInterpolator(1.6f)
+            addUpdateListener {
+                val f = it.animatedValue as Float
+                tabPill.translationX = x0 + (x1 - x0) * f
+                lp.width = (w0 + (w1 - w0) * f).toInt()
+                tabPill.layoutParams = lp
+                pillCor = cores.evaluate(f, c0, corAlvo) as Int
+                tabPillBg.setColor(pillCor)
+            }
+            start()
         }
     }
 
