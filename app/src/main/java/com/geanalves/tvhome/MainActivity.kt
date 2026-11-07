@@ -551,11 +551,13 @@ class MainActivity : Activity() {
             letterSpacing = -0.01f
         }
         // Data embaixo, em verde-água: "sex., 6 de novembro"
+        // Relógio 2: data branca dentro de uma pílula preta (no escuro, a pílula fica clara)
         dateText = TextView(this).apply {
-            textSize = 17f
-            setTextColor(if (Cores.escuro) 0xFFA8EBD9.toInt() else 0xFF1E9A84.toInt())
-            gravity = Gravity.END
-            setPadding(0, dp(2), dp(2), 0)
+            textSize = 15f
+            setTextColor(Cores.papel)
+            background = rounded(INK, 14)
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(3), dp(12), dp(4))
         }
         weatherText = TextView(this).apply {
             textSize = 16f
@@ -564,7 +566,11 @@ class MainActivity : Activity() {
             setPadding(0, dp(4), dp(2), 0)
         }
         clockCol.addView(clock, LinearLayout.LayoutParams(WRAP, WRAP))
-        clockCol.addView(dateText, LinearLayout.LayoutParams(WRAP, WRAP))
+        clockCol.addView(dateText, LinearLayout.LayoutParams(WRAP, WRAP).apply {
+            gravity = Gravity.END
+            topMargin = dp(6)
+            bottomMargin = dp(4)
+        })
         clockCol.addView(weatherText, LinearLayout.LayoutParams(WRAP, WRAP))
         // Lembretes do perfil, pequenos embaixo do relógio
         lembreteText = TextView(this).apply {
@@ -623,10 +629,16 @@ class MainActivity : Activity() {
         content.addView(cardsArea, LinearLayout.LayoutParams(MATCH, 0, 1f))
 
         // --- barra de apps
+        // Faixa branca lisa de ponta a ponta, sem cantos, com uma linha fina em cima (barra 1)
         val dock = FrameLayout(this).apply {
-            background = rounded(Cores.barra, 30)
-            elevation = dpf(3)
-            setPadding(dp(16), dp(12), dp(16), dp(12))
+            background = android.graphics.drawable.LayerDrawable(
+                arrayOf(
+                    android.graphics.drawable.ColorDrawable(Cores.sutil),
+                    android.graphics.drawable.ColorDrawable(Cores.barra),
+                ),
+            ).apply { setLayerInset(1, 0, dp(1), 0, 0) }
+            elevation = dpf(4)
+            setPadding(dp(48), dp(14), dp(48), dp(16))
             clipChildren = false
             clipToPadding = false
         }
@@ -644,7 +656,16 @@ class MainActivity : Activity() {
         }
         dockScroll.addView(dockRow, FrameLayout.LayoutParams(WRAP, WRAP))
         dock.addView(dockScroll, FrameLayout.LayoutParams(MATCH, WRAP))
-        content.addView(dock, LinearLayout.LayoutParams(MATCH, WRAP))
+        // Margens negativas: a faixa encosta nas bordas da tela (esquerda, direita e embaixo)
+        content.addView(
+            dock,
+            LinearLayout.LayoutParams(MATCH, WRAP).apply {
+                leftMargin = -dp(56)
+                rightMargin = -dp(56)
+                bottomMargin = -dp(26)
+                topMargin = dp(6)
+            },
+        )
 
         saver = buildSaver()
         root.addView(saver, FrameLayout.LayoutParams(MATCH, MATCH))
@@ -1112,7 +1133,7 @@ class MainActivity : Activity() {
     /** Tamanho dos blocos do dock: 7 apps + "Todos" cabem sem rolar. */
     private fun dockSize(): Pair<Int, Int> {
         val gap = dp(DOCK_GAP)
-        val avail = resources.displayMetrics.widthPixels - dp(112) - dp(32) - dp(16)
+        val avail = resources.displayMetrics.widthPixels - dp(96) - dp(16)
         val w = ((avail - gap * DOCK_APPS) / (DOCK_APPS + 9f / 16f)).toInt()
         val h = w * 9 / 16
         return w to h
