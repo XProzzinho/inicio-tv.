@@ -141,9 +141,24 @@ class MainActivity : Activity() {
         selectTab(0)
     }
 
+    /** Avisa o Lumi TV qual perfil está em uso (favoritos por perfil e modo infantil). */
+    private fun avisarLumi() {
+        try {
+            val p = prefs.perfil
+            sendBroadcast(
+                Intent().setClassName("com.geanalves.tvonline", "com.geanalves.tvonline.ConfigReceiver")
+                    .putExtra("perfil", p)
+                    .putExtra("perfil_nome", prefs.nome(p))
+                    .putExtra("perfil_kids", prefs.avatar(p) in 10..14),
+            )
+        } catch (_: Throwable) {
+        }
+    }
+
     override fun onResume() {
         handler.postDelayed({ if (!isFinishing) offerVolumeService() }, 1500)
         super.onResume()
+        avisarLumi()
         startMeter()
         buildDock()
         handler.removeCallbacks(tick)
@@ -1032,6 +1047,7 @@ class MainActivity : Activity() {
                 setPadding(dp(10), dp(6), dp(10), dp(6))
                 setOnClickListener {
                     prefs.perfil = i
+                    avisarLumi()
                     refreshProfile()
                     refreshApps()
                     d.dismiss()
