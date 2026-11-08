@@ -1160,9 +1160,18 @@ class MainActivity : Activity() {
         return lp
     }
 
+    /** Borda bem fina igual em todos os blocos da barra (todos do mesmo tamanho). */
+    private fun bordaDock() = GradientDrawable().apply {
+        cornerRadius = dpf(12)
+        setColor(Color.TRANSPARENT)
+        setStroke(dp(1), 0x1A000000)
+    }
+
     private fun dockTile(e: AppEntry): View {
         val card = FrameLayout(this).apply {
-            background = rounded(0xFF2C2C2E.toInt(), 14)
+            // Barra 1: todos os blocos 16:9, mesmo fundo claro e mesma borda fina
+            background = rounded(Cores.janela, 12)
+            foreground = bordaDock()
             clipToOutline = true
             isFocusable = true
             isClickable = true
@@ -1184,13 +1193,13 @@ class MainActivity : Activity() {
             }
             col.addView(
                 ImageView(this).apply { setImageDrawable(AppRepo.icon(this@MainActivity, e)) },
-                LinearLayout.LayoutParams(dp(30), dp(30)),
+                LinearLayout.LayoutParams(dp(28), dp(28)),
             )
             col.addView(
                 TextView(this).apply {
                     text = e.label
                     textSize = 11f
-                    setTextColor(Color.WHITE)
+                    setTextColor(INK)
                     gravity = Gravity.CENTER
                     maxLines = 1
                     ellipsize = TextUtils.TruncateAt.END
@@ -1220,7 +1229,8 @@ class MainActivity : Activity() {
 
     private fun moreTile(): View {
         val card = FrameLayout(this).apply {
-            background = rounded(Cores.sutil, 14)
+            background = rounded(Cores.campo, 12)
+            foreground = bordaDock()
             clipToOutline = true
             isFocusable = true
             isClickable = true
@@ -1255,9 +1265,15 @@ class MainActivity : Activity() {
     }
 
     private fun styleDockFocus(card: View) {
-        val r = ring(14)
+        // Selecionado: contorno preto (no fundo branco o anel branco sumiria)
+        val r = GradientDrawable().apply {
+            cornerRadius = dpf(12)
+            setColor(Color.TRANSPARENT)
+            setStroke(dp(3), INK)
+        }
+        val normal = card.foreground
         card.setOnFocusChangeListener { v, has ->
-            v.foreground = if (has) r else null
+            v.foreground = if (has) r else normal
             v.animate()
                 .scaleX(if (has) 1.15f else 1f)
                 .scaleY(if (has) 1.15f else 1f)
@@ -2093,7 +2109,7 @@ class MainActivity : Activity() {
             R.drawable.avatar_10, R.drawable.avatar_11, R.drawable.avatar_12, R.drawable.avatar_13, R.drawable.avatar_14,
         )
         private const val DOCK_APPS = 7
-        private const val DOCK_GAP = 12
+        private const val DOCK_GAP = 16
         /** Tempo parado até o descanso de tela (3 minutos) */
         private const val IDLE_MS = 3 * 60_000L
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
