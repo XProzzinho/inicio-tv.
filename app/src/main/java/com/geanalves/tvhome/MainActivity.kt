@@ -991,14 +991,33 @@ class MainActivity : Activity() {
             }
         }
 
-        val focusRing = ring(18)
+        // Card 2 "Flutuando": parado tem uma borda bem fina; selecionado sobe,
+        // cresce um pouco, ganha borda clara por dentro e sombra funda
+        val bordaFina = GradientDrawable().apply {
+            cornerRadius = dpf(18)
+            setColor(Color.TRANSPARENT)
+            setStroke(dp(1), 0x1A000000)
+        }
+        val bordaClara = GradientDrawable().apply {
+            cornerRadius = dpf(18)
+            setColor(Color.TRANSPARENT)
+            setStroke(dp(2), 0x8CFFFFFF.toInt())
+        }
+        frame.foreground = bordaFina
+        frame.elevation = dpf(2)
+        if (android.os.Build.VERSION.SDK_INT >= 28) {
+            frame.outlineSpotShadowColor = Color.BLACK
+            frame.outlineAmbientShadowColor = Color.BLACK
+        }
         frame.setOnFocusChangeListener { v, has ->
-            v.foreground = if (has) focusRing else null
+            v.foreground = if (has) bordaClara else bordaFina
             v.animate()
-                .scaleX(if (has) 1.03f else 1f)
-                .scaleY(if (has) 1.03f else 1f)
-                .translationZ(if (has) dpf(20) else 0f)
-                .setDuration(180)
+                .scaleX(if (has) 1.06f else 1f)
+                .scaleY(if (has) 1.06f else 1f)
+                .translationY(if (has) -dpf(10) else 0f)
+                .translationZ(if (has) dpf(26) else 0f)
+                .setInterpolator(android.view.animation.DecelerateInterpolator(1.6f))
+                .setDuration(220)
                 .start()
             if (has) {
                 select(item, animate = true)
