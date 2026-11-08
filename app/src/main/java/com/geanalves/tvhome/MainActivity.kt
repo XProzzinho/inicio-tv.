@@ -860,6 +860,7 @@ class MainActivity : Activity() {
         val first = cardsRow.getChildAt(if (looping) cards.size else 0) ?: return
         select(first, animate = false)
         if (looping) afterLayout { cardsScroll.scrollTo((first.left - if (fixedLayout) 0 else dp(4)).coerceAtLeast(0), 0) }
+        cascata(cardsRow.indexOfChild(first))
         if (firstLoad || focusWasHere || currentFocus == null) {
             firstLoad = false
             first.post { (first as ViewGroup).getChildAt(0).requestFocus() }
@@ -871,6 +872,27 @@ class MainActivity : Activity() {
     private fun roundWidth(): Int = loopCards.indices.sumOf { cardWidth(it) + dp(26) }
 
     /** Coloca uma volta inteira da lista no fim ou no começo da fileira. */
+    /**
+     * Transição 4 "Cascata": ao trocar de aba, os cartazes que aparecem na tela
+     * entram um depois do outro, subindo de leve.
+     */
+    private fun cascata(inicio: Int) {
+        val de = inicio.coerceAtLeast(0)
+        val ate = (de + 6).coerceAtMost(cardsRow.childCount)
+        for (i in de until ate) {
+            val v = cardsRow.getChildAt(i)
+            v.alpha = 0f
+            v.translationY = dpf(16)
+            v.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setStartDelay(((i - de) * 70).toLong())
+                .setDuration(360)
+                .setInterpolator(android.view.animation.DecelerateInterpolator(1.8f))
+                .start()
+        }
+    }
+
     private fun addRound(atStart: Boolean) {
         loopCards.forEachIndexed { i, c ->
             val lp = LinearLayout.LayoutParams(cardWidth(i), WRAP)
