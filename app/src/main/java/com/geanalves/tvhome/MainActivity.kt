@@ -72,7 +72,7 @@ class MainActivity : Activity() {
             lembreteText.visibility = View.GONE
             return
         }
-        lembreteText.text = lista.joinToString("\n") { "● ${it.texto} · ${Lembretes.quando(it.data)}" }
+        lembreteText.text = lista.joinToString("\n") { "${it.texto} · ${Lembretes.quando(it.data)}" }
         lembreteText.visibility = View.VISIBLE
     }
     private val dateFmt = SimpleDateFormat("EEE, d 'de' MMMM", Locale("pt", "BR"))
@@ -132,7 +132,7 @@ class MainActivity : Activity() {
             mostrarLembretes()
             greeting.text = saudacao()
             if (saver.visibility == View.VISIBLE) saverClock.text = clock.text
-            Weather.now { t -> weatherText.text = t ?: "" }
+            Weather.now { t -> mostrarClima(t ?: "") }
             handler.postDelayed(this, 10_000)
         }
     }
@@ -373,6 +373,27 @@ class MainActivity : Activity() {
             }.start()
     }
 
+    /** Texto do clima com o ícone do tempo na frente. */
+    private fun mostrarClima(t: String) {
+        weatherText.text = t
+        val low = t.lowercase()
+        val res = when {
+            "trovoada" in low -> R.drawable.tempo_trovoada
+            "chuva" in low || "pancada" in low -> R.drawable.tempo_chuva
+            "garoa" in low || "chuvisco" in low -> R.drawable.tempo_garoa
+            "neblina" in low || "nevoeiro" in low -> R.drawable.tempo_neblina
+            "neve" in low -> R.drawable.tempo_neve
+            "parcial" in low || "poucas" in low -> R.drawable.tempo_parcial
+            "nublado" in low || "nuvens" in low || "encoberto" in low -> R.drawable.tempo_nublado
+            t.isNotBlank() -> R.drawable.tempo_sol
+            else -> 0
+        }
+        val d = if (res != 0) getDrawable(res)?.mutate() else null
+        d?.setTint(GRAY)
+        d?.setBounds(0, 0, dp(18), dp(18))
+        weatherText.setCompoundDrawablesRelative(d, null, null, null)
+    }
+
     private fun goHome() {
         if (looping) {
             // Volta para o começo da fileira infinita
@@ -543,8 +564,9 @@ class MainActivity : Activity() {
             includeFontPadding = false
             gravity = Gravity.END
             letterSpacing = -0.01f
+            // Números da mesma largura: a hora não "pula" quando muda
+            fontFeatureSettings = "tnum, lnum"
         }
-        // Data embaixo, em verde-água: "sex., 6 de novembro"
         // Relógio 2: data branca dentro de uma pílula preta (no escuro, a pílula fica clara)
         dateText = TextView(this).apply {
             textSize = 15f
@@ -553,30 +575,43 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
             setPadding(dp(12), dp(3), dp(12), dp(4))
         }
+        // Clima com o ícone do tempo, cinza, alinhado na mesma borda direita
         weatherText = TextView(this).apply {
-            textSize = 16f
+            textSize = 15f
             setTextColor(GRAY)
-            gravity = Gravity.END
-            setPadding(0, dp(4), dp(2), 0)
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            compoundDrawablePadding = dp(6)
         }
-        clockCol.addView(clock, LinearLayout.LayoutParams(WRAP, WRAP))
+        // Canto do relógio 1: tudo na mesma borda direita, com o mesmo espaço entre as linhas
+        clockCol.addView(clock, LinearLayout.LayoutParams(WRAP, WRAP).apply { gravity = Gravity.END })
         clockCol.addView(dateText, LinearLayout.LayoutParams(WRAP, WRAP).apply {
             gravity = Gravity.END
-            topMargin = dp(6)
-            bottomMargin = dp(4)
+            topMargin = dp(8)
         })
-        clockCol.addView(weatherText, LinearLayout.LayoutParams(WRAP, WRAP))
+        clockCol.addView(weatherText, LinearLayout.LayoutParams(WRAP, WRAP).apply {
+            gravity = Gravity.END
+            topMargin = dp(8)
+        })
         // Lembretes do perfil, pequenos embaixo do relógio
         lembreteText = TextView(this).apply {
-            textSize = 15f
+            textSize = 14f
             setTextColor(INK)
-            gravity = Gravity.END
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
             maxLines = 3
-            setPadding(dp(12), dp(4), dp(12), dp(4))
-            background = rounded(0x26FF9500, 12)
+            setPadding(dp(10), dp(4), dp(12), dp(5))
+            background = rounded(if (Cores.escuro) 0x40FF9500 else 0xFFFCE8CC.toInt(), 12)
+            compoundDrawablePadding = dp(6)
+            getDrawable(R.drawable.ic_sino)?.mutate()?.let { d ->
+                d.setTint(0xFFBA7517.toInt())
+                d.setBounds(0, 0, dp(16), dp(16))
+                setCompoundDrawablesRelative(d, null, null, null)
+            }
             visibility = View.GONE
         }
-        clockCol.addView(lembreteText, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(6) })
+        clockCol.addView(lembreteText, LinearLayout.LayoutParams(WRAP, WRAP).apply {
+            gravity = Gravity.END
+            topMargin = dp(8)
+        })
         val clp = LinearLayout.LayoutParams(WRAP, WRAP)
         clp.rightMargin = dp(8)
         top.addView(clockCol, clp)
