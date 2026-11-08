@@ -1,0 +1,46 @@
+name: Testar na TV virtual
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  teste:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Baixar os APKs mais novos
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download -R XProzzinho/inicio-tv. -p inicio-tv.apk
+          gh release download -R XProzzinho/TV-online -p tv-online.apk -O lumi-tv.apk || true
+          ls -la *.apk
+
+      - name: Ligar a aceleração da máquina virtual
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: TV Android virtual (Android TV 11)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          target: android-tv
+          arch: x86
+          profile: tv_1080p
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: bash teste/rodar.sh
+
+      - name: Guardar os prints
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: prints
+          path: prints/
