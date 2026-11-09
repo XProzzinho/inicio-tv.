@@ -4,7 +4,7 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   teste:
@@ -44,3 +44,15 @@ jobs:
         with:
           name: prints
           path: prints/
+
+      - name: Salvar os prints no ramo teste-prints
+        if: always()
+        run: |
+          cd prints
+          git init -q
+          git checkout -q -b teste-prints
+          git config user.name "Teste"
+          git config user.email "geansdp2@gmail.com"
+          git add -A
+          git commit -qm "Prints do teste"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" teste-prints
