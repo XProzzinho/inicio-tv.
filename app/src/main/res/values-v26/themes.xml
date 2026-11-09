@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 8+: sem o destaque quadrado cinza da TV (o Início TV desenha os próprios anéis) -->
+    <style name="Theme.InicioTV" parent="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
+        <item name="android:windowBackground">#FFF6F3EF</item>
+        <item name="android:windowShowWallpaper">false</item>
+        <item name="android:windowAnimationStyle">@android:style/Animation.Activity</item>
+        <item name="android:defaultFocusHighlightEnabled">false</item>
+    </style>
+</resources>

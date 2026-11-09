@@ -23,6 +23,13 @@ jobs:
         with:
           gradle-version: "8.9"
 
+      - name: Fonte do relógio
+        run: |
+          mkdir -p app/src/main/assets
+          curl -fsSL -o app/src/main/assets/relogio.ttf \
+            "https://raw.githubusercontent.com/google/fonts/main/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf" \
+            && ls -l app/src/main/assets/relogio.ttf || echo "::warning::Fonte do relógio não baixou; usando a serifa do Android"
+
       - name: Compilar
         run: |
           set -o pipefail

@@ -15,8 +15,28 @@ object Tmdb {
     private const val API = "https://api.themoviedb.org/3"
     private const val IMG = "https://image.tmdb.org/t/p/"
 
-    private val key: String = BuildConfig.TMDB_KEY.trim()
+    // Chave mandada pelo Controle TV; se não tiver, usa a da compilação (segredo do GitHub)
+    @Volatile
+    private var key: String = BuildConfig.TMDB_KEY.trim()
     val enabled: Boolean get() = key.isNotBlank()
+
+    /** Avisado quando o controle troca a chave (a tela recarrega os cartazes). */
+    var aoMudarChave: (() -> Unit)? = null
+
+    fun carregarChave(ctx: android.content.Context) {
+        val salva = ctx.getSharedPreferences("inicio", android.content.Context.MODE_PRIVATE).getString("tmdb_chave", null)
+        key = (salva ?: BuildConfig.TMDB_KEY).trim()
+    }
+
+    fun salvarChave(ctx: android.content.Context, chave: String) {
+        val sp = ctx.getSharedPreferences("inicio", android.content.Context.MODE_PRIVATE).edit()
+        if (chave.isBlank()) sp.remove("tmdb_chave") else sp.putString("tmdb_chave", chave.trim())
+        sp.apply()
+        key = (chave.ifBlank { BuildConfig.TMDB_KEY }).trim()
+        lists.clear()
+        details.clear()
+        main.post { aoMudarChave?.invoke() }
+    }
 
     data class Item(val id: Int, val type: String, val title: String, val backdrop: String)
     data class Details(val meta: String, val providerId: Int?, val providerName: String?)
@@ -68,34 +88,62 @@ object Tmdb {
     }
 
     /** tab: 0 = Explorar (em alta), 1 = Filmes, 2 = Séries */
-    fun list(tab: Int, cb: (List<Item>) -> Unit) {
-        lists[tab]?.let { cb(it); return }
+    private fun parse(json: JSONObject, defType: String): List<Item> {
+        val arr = json.optJSONArray("results") ?: return emptyList()
+        val out = ArrayList<Item>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val type = str(o, "media_type") ?: defType
+            if (type != "movie" && type != "tv") continue
+            val backdrop = str(o, "backdrop_path") ?: continue
+            val title = str(o, "title") ?: str(o, "name") ?: continue
+            out += Item(o.optInt("id"), type, title, backdrop)
+        }
+        return out
+    }
+
+    /**
+     * tab: 0 = Explorar (em alta), 1 = Filmes, 2 = Séries.
+     * [infantil] = perfil de criança: só desenhos, filmes de família e séries infantis.
+     */
+    fun list(tab: Int, infantil: Boolean = false, cb: (List<Item>) -> Unit) {
+        val chave = if (infantil) tab + 10 else tab
+        lists[chave]?.let { cb(it); return }
         pool.execute {
             val result = try {
                 val streaming = "&watch_region=BR&with_watch_monetization_types=flatrate&sort_by=popularity.desc"
-                val (json, defType) = when (tab) {
-                    1 -> get("/discover/movie", streaming) to "movie"
-                    2 -> get("/discover/tv", streaming) to "tv"
-                    else -> get("/trending/all/week") to "movie"
-                }
-                val arr = json.optJSONArray("results")
-                val out = ArrayList<Item>()
-                if (arr != null) {
-                    for (i in 0 until arr.length()) {
-                        val o = arr.optJSONObject(i) ?: continue
-                        val type = str(o, "media_type") ?: defType
-                        if (type != "movie" && type != "tv") continue
-                        val backdrop = str(o, "backdrop_path") ?: continue
-                        val title = str(o, "title") ?: str(o, "name") ?: continue
-                        out += Item(o.optInt("id"), type, title, backdrop)
+                if (infantil) {
+                    // Filmes: animação ou família, classificação Livre ou 10 anos no Brasil
+                    val filmesKids = "$streaming&with_genres=16|10751&certification_country=BR&certification=L|10"
+                    // Séries: categoria Kids do TMDB
+                    val seriesKids = "$streaming&with_genres=10762"
+                    when (tab) {
+                        1 -> parse(get("/discover/movie", filmesKids), "movie")
+                        2 -> parse(get("/discover/tv", seriesKids), "tv")
+                        else -> {
+                            // Explorar: filmes e séries infantis misturados
+                            val f = parse(get("/discover/movie", filmesKids), "movie")
+                            val t = parse(get("/discover/tv", seriesKids), "tv")
+                            val mix = ArrayList<Item>()
+                            for (i in 0 until maxOf(f.size, t.size)) {
+                                f.getOrNull(i)?.let { mix += it }
+                                t.getOrNull(i)?.let { mix += it }
+                            }
+                            mix
+                        }
+                    }
+                } else {
+                    when (tab) {
+                        1 -> parse(get("/discover/movie", streaming), "movie")
+                        2 -> parse(get("/discover/tv", streaming), "tv")
+                        else -> parse(get("/trending/all/week"), "movie")
                     }
                 }
-                out
             } catch (t: Throwable) {
                 emptyList()
             }
             main.post {
-                if (result.isNotEmpty()) lists[tab] = result
+                if (result.isNotEmpty()) lists[chave] = result
                 cb(result)
             }
         }

@@ -44,7 +44,12 @@ import java.util.Locale
 /** Tela inicial: "Para você" com filmes/séries em destaque e a barra de apps embaixo. */
 class MainActivity : Activity() {
 
-    private data class Card(val title: String, val item: Tmdb.Item?, val app: AppEntry?)
+    private data class Card(
+        val title: String,
+        val item: Tmdb.Item?,
+        val app: AppEntry?,
+    )
+
 
     private lateinit var prefs: Prefs
     private lateinit var bgImage: ImageView
@@ -54,6 +59,35 @@ class MainActivity : Activity() {
     private lateinit var dockRow: LinearLayout
     private lateinit var clock: TextView
     private lateinit var weatherText: TextView
+    private lateinit var dateText: TextView
+
+    // ---------- bolinha da TV ao vivo ----------
+
+    private lateinit var lembreteText: TextView
+
+    private fun mostrarLembretes() {
+        if (!::lembreteText.isInitialized) return
+        val lista = Lembretes.doPerfil(this, prefs.perfil).take(3)
+        if (lista.isEmpty()) {
+            lembreteText.visibility = View.GONE
+            return
+        }
+        lembreteText.text = lista.joinToString("\n") { "${it.texto} · ${Lembretes.quando(it.data)}" }
+        lembreteText.visibility = View.VISIBLE
+    }
+    private val dateFmt = SimpleDateFormat("EEE, d 'de' MMMM", Locale("pt", "BR"))
+
+    /** Fonte de serifa do relógio (Playfair Display, baixada na compilação); senão a serifa do Android. */
+    private fun fonteRelogio(): Typeface = try {
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            Typeface.Builder(assets, "relogio.ttf").setFontVariationSettings("'wght' 600").build()
+                ?: Typeface.create(Typeface.SERIF, Typeface.BOLD)
+        } else {
+            Typeface.createFromAsset(assets, "relogio.ttf")
+        }
+    } catch (_: Throwable) {
+        Typeface.create(Typeface.SERIF, Typeface.BOLD)
+    }
     private lateinit var greeting: TextView
     private lateinit var avatarText: TextView
     private lateinit var avatarBg: GradientDrawable
@@ -78,6 +112,11 @@ class MainActivity : Activity() {
     private var bigW = 0
     private var fixedLayout = false
 
+    // Fileira infinita: a lista se repete em "voltas" para os dois lados
+    private var loopCards: List<Card> = emptyList()
+    private var looping = false
+    private var loopNote: String? = null
+
     private val ptBr = Locale("pt", "BR")
     private val timeFmt = SimpleDateFormat("HH:mm", ptBr)
 
@@ -88,10 +127,12 @@ class MainActivity : Activity() {
                 recreate()
                 return
             }
-            clock.text = timeFmt.format(Date())
+            trocarHora(timeFmt.format(Date()))
+            dateText.text = dateFmt.format(Date())
+            mostrarLembretes()
             greeting.text = saudacao()
             if (saver.visibility == View.VISIBLE) saverClock.text = clock.text
-            Weather.now { t -> weatherText.text = t ?: "" }
+            Weather.now { t -> mostrarClima(t ?: "") }
             handler.postDelayed(this, 10_000)
         }
     }
@@ -118,8 +159,12 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
+        Cores.manual = prefs.escuro
+        Tmdb.carregarChave(this)
+        Tmdb.aoMudarChave = { if (!isFinishing) loadCards(force = true) }
+        Lembretes.aoMudar = { if (!isFinishing) mostrarLembretes() }
         val dm = resources.displayMetrics
-        cardH = (dm.heightPixels * 0.36f).toInt()
+        cardH = (dm.heightPixels * 0.34f).toInt()
         wideW = cardH * 16 / 9
         narrowW = (cardH * 0.78f).toInt()
         // Dois cartazes grandes + um pequeno cabendo na largura da tela
@@ -128,6 +173,7 @@ class MainActivity : Activity() {
         Cores.atualizar()
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Cores.fundoTopo))
         setContentView(buildShell())
+        cardsRow.viewTreeObserver.addOnGlobalFocusChangeListener { _, now -> onRowFocus(now) }
         buildMeter()
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
@@ -149,7 +195,7 @@ class MainActivity : Activity() {
                 Intent().setClassName("com.geanalves.tvonline", "com.geanalves.tvonline.ConfigReceiver")
                     .putExtra("perfil", p)
                     .putExtra("perfil_nome", prefs.nome(p))
-                    .putExtra("perfil_kids", prefs.avatar(p) in 10..14),
+                    .putExtra("perfil_kids", prefs.crianca(p) || prefs.avatar(p) in 10..14),
             )
         } catch (_: Throwable) {
         }
@@ -159,6 +205,8 @@ class MainActivity : Activity() {
         handler.postDelayed({ if (!isFinishing) offerVolumeService() }, 1500)
         super.onResume()
         avisarLumi()
+        Brilho.restaurar(this)
+        Atualizacao.conferir(this) { v -> if (!isFinishing) avisarAtualizacao(v) }
         startMeter()
         buildDock()
         handler.removeCallbacks(tick)
@@ -209,7 +257,166 @@ class MainActivity : Activity() {
         goHome()
     }
 
+    /** Botão da lua: liga/desliga o modo escuro e redesenha a tela. */
+    /** Bolinha branca do topo; fica preta quando selecionada. */
+    private fun botaoAjustes(): View {
+        val bg = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(Cores.janela)
+        }
+        val icon = ImageView(this).apply {
+            setImageResource(R.drawable.ic_grade)
+            setColorFilter(PRETO)
+        }
+        return FrameLayout(this).apply {
+            background = bg
+            elevation = dpf(3)
+            isFocusable = true
+            isClickable = true
+            outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+            addView(icon, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER))
+            setOnClickListener { abrirAjustes() }
+            setOnFocusChangeListener { v, has ->
+                bg.setColor(if (has) PRETO else Cores.janela)
+                icon.setColorFilter(if (has) Cores.papel else PRETO)
+                v.animate().scaleX(if (has) 1.1f else 1f).scaleY(if (has) 1.1f else 1f).setDuration(120).start()
+            }
+        }
+    }
+
+    /** Grade 2×2 de ajustes rápidos, abaixo da bolinha, no canto direito. */
+    private fun abrirAjustes() {
+        val d = android.app.Dialog(this)
+        d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = rounded(Cores.janela, 26)
+            setPadding(dp(12), dp(12), dp(12), dp(12))
+            clipChildren = false
+            clipToPadding = false
+        }
+        d.setContentView(box)
+        d.window?.apply {
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            setDimAmount(0.12f)
+            setGravity(Gravity.TOP or Gravity.END)
+            attributes = attributes.apply {
+                x = dp(50)
+                y = dp(96)
+            }
+        }
+        fun bloco(res: Int, nome: String, acao: () -> Unit): View {
+            val bg = rounded(Cores.campo, 18)
+            val ic = ImageView(this).apply {
+                setImageResource(res)
+                setColorFilter(PRETO)
+            }
+            val tx = TextView(this).apply {
+                text = nome
+                textSize = 15f
+                setTextColor(PRETO)
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                setPadding(0, dp(10), 0, 0)
+            }
+            return LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = bg
+                setPadding(dp(16), dp(16), dp(16), dp(14))
+                isFocusable = true
+                isClickable = true
+                addView(ic, LinearLayout.LayoutParams(dp(26), dp(26)))
+                addView(tx)
+                setOnClickListener {
+                    d.dismiss()
+                    acao()
+                }
+                setOnFocusChangeListener { v, has ->
+                    bg.setColor(if (has) PRETO else Cores.campo)
+                    ic.setColorFilter(if (has) Cores.papel else PRETO)
+                    tx.setTextColor(if (has) Cores.papel else PRETO)
+                    v.animate().scaleX(if (has) 1.04f else 1f).scaleY(if (has) 1.04f else 1f).setDuration(120).start()
+                }
+            }
+        }
+        val blocos = ArrayList<View>()
+        // O Fire Stick não tem entradas HDMI
+        if (!isFireTv()) blocos += bloco(R.drawable.ic_input, "Entradas") { openInputs() }
+        blocos += bloco(R.drawable.ic_wifi, "Wi-Fi") { openWifi() }
+        blocos += bloco(if (Cores.escuro) R.drawable.ic_claro else R.drawable.ic_lua, if (Cores.escuro) "Modo claro" else "Modo escuro") { trocarModo() }
+        blocos += bloco(R.drawable.ic_menu, "Configurações") { open(Intent(Settings.ACTION_SETTINGS)) }
+        blocos.chunked(2).forEachIndexed { r, par ->
+            val linha = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                clipChildren = false
+                clipToPadding = false
+            }
+            par.forEachIndexed { c, v ->
+                val lp = LinearLayout.LayoutParams(dp(156), dp(104))
+                if (c == 0) lp.rightMargin = dp(10)
+                linha.addView(v, lp)
+            }
+            val llp = LinearLayout.LayoutParams(WRAP, WRAP)
+            if (r > 0) llp.topMargin = dp(10)
+            box.addView(linha, llp)
+        }
+        d.show()
+        blocos.first().requestFocus()
+    }
+
+    private fun trocarModo() {
+        prefs.escuro = !prefs.escuro
+        Cores.manual = prefs.escuro
+        Cores.atualizar()
+        recreate()
+    }
+
+    /** Relógio vivo: a hora velha sobe e some, a nova chega de baixo (animação 6). */
+    private fun trocarHora(nova: String) {
+        if (clock.text.toString() == nova) return
+        if (clock.text.isNullOrEmpty() || clock.height == 0) {
+            clock.text = nova
+            return
+        }
+        val h = clock.height * 0.45f
+        clock.animate().translationY(-h).alpha(0f).setDuration(200)
+            .setInterpolator(android.view.animation.AccelerateInterpolator())
+            .withEndAction {
+                clock.text = nova
+                clock.translationY = h
+                clock.animate().translationY(0f).alpha(1f).setDuration(320)
+                    .setInterpolator(android.view.animation.DecelerateInterpolator(1.5f)).start()
+            }.start()
+    }
+
+    /** Texto do clima com o ícone do tempo na frente. */
+    private fun mostrarClima(t: String) {
+        weatherText.text = t
+        val low = t.lowercase()
+        val res = when {
+            "trovoada" in low -> R.drawable.tempo_trovoada
+            "chuva" in low || "pancada" in low -> R.drawable.tempo_chuva
+            "garoa" in low || "chuvisco" in low -> R.drawable.tempo_garoa
+            "neblina" in low || "nevoeiro" in low -> R.drawable.tempo_neblina
+            "neve" in low -> R.drawable.tempo_neve
+            "parcial" in low || "poucas" in low -> R.drawable.tempo_parcial
+            "nublado" in low || "nuvens" in low || "encoberto" in low -> R.drawable.tempo_nublado
+            t.isNotBlank() -> R.drawable.tempo_sol
+            else -> 0
+        }
+        val d = if (res != 0) getDrawable(res)?.mutate() else null
+        d?.setTint(GRAY)
+        d?.setBounds(0, 0, dp(18), dp(18))
+        weatherText.setCompoundDrawablesRelative(d, null, null, null)
+    }
+
     private fun goHome() {
+        if (looping) {
+            // Volta para o começo da fileira infinita
+            showCards(loopCards, loopNote)
+            val n = loopCards.size
+            (cardsRow.getChildAt(n) as? ViewGroup)?.getChildAt(0)?.requestFocus()
+            return
+        }
         cardsScroll.smoothScrollTo(0, 0)
         (cardsRow.getChildAt(0) as? ViewGroup)?.getChildAt(0)?.requestFocus()
     }
@@ -263,16 +470,25 @@ class MainActivity : Activity() {
         root.addView(content, FrameLayout.LayoutParams(MATCH, MATCH))
 
         // --- topo: título + abas | relógio + botões
+        // Nada aqui corta a bolinha do perfil quando ela cresce
         val top = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.TOP
+            clipChildren = false
+            clipToPadding = false
         }
-        val left = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val left = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            clipChildren = false
+            clipToPadding = false
+        }
         // Perfil (bolinha com a inicial) + saudação
         val profileRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 0, 0, dp(4))
+            clipChildren = false
+            clipToPadding = false
+            setPadding(dp(4), dp(4), 0, dp(6))
         }
         avatarBg = GradientDrawable().apply { shape = GradientDrawable.OVAL }
         val avatarRing = GradientDrawable().apply {
@@ -289,30 +505,30 @@ class MainActivity : Activity() {
             isFocusable = true
             isClickable = true
             setOnClickListener { showProfiles() }
+            // Sempre redonda: corta a foto em círculo e tira o destaque quadrado da TV
+            outlineProvider = object : android.view.ViewOutlineProvider() {
+                override fun getOutline(v: View, o: android.graphics.Outline) {
+                    o.setOval(0, 0, v.width, v.height)
+                }
+            }
+            clipToOutline = true
+            if (android.os.Build.VERSION.SDK_INT >= 26) defaultFocusHighlightEnabled = false
             setOnFocusChangeListener { v, has ->
                 v.foreground = if (has) avatarRing else null
                 v.animate().scaleX(if (has) 1.15f else 1f).scaleY(if (has) 1.15f else 1f).setDuration(120).start()
             }
         }
-        profileRow.addView(avatarText, LinearLayout.LayoutParams(dp(36), dp(36)))
+        // Bolinha do perfil do lado das abas
+        profileRow.addView(avatarText, LinearLayout.LayoutParams(dp(46), dp(46)).apply { rightMargin = dp(10) })
+        // "Boa noite, Geanderson" embaixo das abas, um pouco maior
         greeting = TextView(this).apply {
-            textSize = 18f
+            textSize = 22f
             setTextColor(GRAY)
-            setPadding(dp(12), 0, 0, 0)
+            setPadding(dp(8), dp(10), 0, 0)
         }
-        profileRow.addView(greeting)
-        left.addView(profileRow)
-        left.addView(
-            TextView(this).apply {
-                text = "Para você"
-                textSize = 36f
-                setTextColor(INK)
-                typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            },
-        )
         val tabRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, dp(6), 0, 0)
+            gravity = Gravity.CENTER_VERTICAL
         }
         listOf("Explorar", "Filmes", "Séries", "Continuar").forEachIndexed { i, s ->
             val t = makeTab(s, i)
@@ -321,7 +537,25 @@ class MainActivity : Activity() {
             lp.rightMargin = dp(6)
             tabRow.addView(t, lp)
         }
-        left.addView(tabRow)
+        // Pílula que escorrega por trás das abas (animação 4)
+        tabPill = View(this).apply { background = tabPillBg }
+        val tabFrame = FrameLayout(this).apply {
+            clipChildren = false
+            clipToPadding = false
+            addView(tabPill, FrameLayout.LayoutParams(0, 0))
+            addView(tabRow)
+        }
+        tabRow.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> styleTabs(animar = false) }
+        // As abas cabem numa faixa que rola para o lado se faltar espaço
+        val tabScroll = android.widget.HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+            clipChildren = false
+            clipToPadding = false
+            addView(tabFrame)
+        }
+        profileRow.addView(tabScroll, LinearLayout.LayoutParams(0, WRAP, 1f))
+        left.addView(profileRow)
+        left.addView(greeting)
         top.addView(left, LinearLayout.LayoutParams(0, WRAP, 1f))
 
         // Relógio grande com o clima de Pirapora embaixo
@@ -337,38 +571,73 @@ class MainActivity : Activity() {
             setOnClickListener { showForecast() }
             setOnFocusChangeListener { _, has -> clockBg.setColor(if (has) Cores.sutil else Color.TRANSPARENT) }
         }
+        // Relógio estilo tela de bloqueio: número de serifa, preto como antes
         clock = TextView(this).apply {
-            textSize = 52f
+            textSize = 60f
             setTextColor(INK)
-            typeface = Typeface.create("sans-serif-thin", Typeface.NORMAL)
+            typeface = fonteRelogio()
             includeFontPadding = false
             gravity = Gravity.END
+            letterSpacing = -0.01f
+            // Números da mesma largura: a hora não "pula" quando muda
+            fontFeatureSettings = "tnum, lnum"
         }
+        // Relógio 2: data branca dentro de uma pílula preta (no escuro, a pílula fica clara)
+        dateText = TextView(this).apply {
+            textSize = 15f
+            setTextColor(Cores.papel)
+            background = rounded(INK, 14)
+            gravity = Gravity.CENTER
+            setPadding(dp(12), dp(3), dp(12), dp(4))
+        }
+        // Clima com o ícone do tempo, cinza, alinhado na mesma borda direita
         weatherText = TextView(this).apply {
-            textSize = 16f
+            textSize = 15f
             setTextColor(GRAY)
-            gravity = Gravity.END
-            setPadding(0, dp(4), dp(2), 0)
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            compoundDrawablePadding = dp(6)
         }
-        clockCol.addView(clock, LinearLayout.LayoutParams(WRAP, WRAP))
-        clockCol.addView(weatherText, LinearLayout.LayoutParams(WRAP, WRAP))
+        // Canto do relógio 1: tudo na mesma borda direita, com o mesmo espaço entre as linhas
+        clockCol.addView(clock, LinearLayout.LayoutParams(WRAP, WRAP).apply { gravity = Gravity.END })
+        clockCol.addView(dateText, LinearLayout.LayoutParams(WRAP, WRAP).apply {
+            gravity = Gravity.END
+            topMargin = dp(8)
+        })
+        clockCol.addView(weatherText, LinearLayout.LayoutParams(WRAP, WRAP).apply {
+            gravity = Gravity.END
+            topMargin = dp(8)
+        })
+        // Lembretes do perfil, pequenos embaixo do relógio
+        lembreteText = TextView(this).apply {
+            textSize = 14f
+            setTextColor(INK)
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
+            maxLines = 3
+            setPadding(dp(10), dp(4), dp(12), dp(5))
+            background = rounded(if (Cores.escuro) 0x40FF9500 else 0xFFFCE8CC.toInt(), 12)
+            compoundDrawablePadding = dp(6)
+            getDrawable(R.drawable.ic_sino)?.mutate()?.let { d ->
+                d.setTint(0xFFBA7517.toInt())
+                d.setBounds(0, 0, dp(16), dp(16))
+                setCompoundDrawablesRelative(d, null, null, null)
+            }
+            visibility = View.GONE
+        }
+        clockCol.addView(lembreteText, LinearLayout.LayoutParams(WRAP, WRAP).apply {
+            gravity = Gravity.END
+            topMargin = dp(8)
+        })
         val clp = LinearLayout.LayoutParams(WRAP, WRAP)
         clp.rightMargin = dp(8)
         top.addView(clockCol, clp)
-        // Entradas (HDMI), Wi-Fi e Configurações
-        val group = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = rounded(Color.WHITE, 30)
-            elevation = dpf(3)
+        // Uma bolinha só: abre a grade com Entradas, Wi-Fi, Modo escuro e Configurações
+        val group = FrameLayout(this).apply {
+            // Folga em volta para a bolinha crescer sem ser cortada
             setPadding(dp(6), dp(6), dp(6), dp(6))
             clipChildren = false
             clipToPadding = false
         }
-        // O Fire Stick não tem entradas HDMI: sem o botão de Entradas
-        if (!isFireTv()) group.addView(groupButton(R.drawable.ic_input, first = true) { openInputs() })
-        group.addView(groupButton(R.drawable.ic_wifi, first = isFireTv()) { openWifi() })
-        group.addView(groupButton(R.drawable.ic_menu) { open(Intent(Settings.ACTION_SETTINGS)) })
+        group.addView(botaoAjustes(), FrameLayout.LayoutParams(dp(54), dp(54)))
         top.addView(group, LinearLayout.LayoutParams(WRAP, WRAP))
         content.addView(top, LinearLayout.LayoutParams(MATCH, WRAP))
 
@@ -387,10 +656,11 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             clipChildren = false
             clipToPadding = false
-            setPadding(0, dp(26), resources.displayMetrics.widthPixels, dp(8))
+            setPadding(0, dp(18), resources.displayMetrics.widthPixels, dp(18))
         }
-        cardsScroll.addView(cardsRow, FrameLayout.LayoutParams(WRAP, MATCH))
-        cardsArea.addView(cardsScroll, FrameLayout.LayoutParams(MATCH, MATCH))
+        cardsScroll.addView(cardsRow, FrameLayout.LayoutParams(WRAP, WRAP))
+        // Cartazes no meio do espaço entre as abas e a barra de apps (nomes sem cortar)
+        cardsArea.addView(cardsScroll, FrameLayout.LayoutParams(MATCH, WRAP, Gravity.CENTER_VERTICAL))
         statusText = TextView(this).apply {
             textSize = 15f
             setTextColor(GRAY)
@@ -404,10 +674,16 @@ class MainActivity : Activity() {
         content.addView(cardsArea, LinearLayout.LayoutParams(MATCH, 0, 1f))
 
         // --- barra de apps
+        // Faixa branca lisa de ponta a ponta, sem cantos, com uma linha fina em cima (barra 1)
         val dock = FrameLayout(this).apply {
-            background = rounded(Cores.barra, 30)
-            elevation = dpf(3)
-            setPadding(dp(16), dp(12), dp(16), dp(12))
+            background = android.graphics.drawable.LayerDrawable(
+                arrayOf(
+                    android.graphics.drawable.ColorDrawable(Cores.sutil),
+                    android.graphics.drawable.ColorDrawable(Cores.barra),
+                ),
+            ).apply { setLayerInset(1, 0, dp(1), 0, 0) }
+            elevation = dpf(4)
+            setPadding(dp(48), dp(14), dp(48), dp(16))
             clipChildren = false
             clipToPadding = false
         }
@@ -425,7 +701,16 @@ class MainActivity : Activity() {
         }
         dockScroll.addView(dockRow, FrameLayout.LayoutParams(WRAP, WRAP))
         dock.addView(dockScroll, FrameLayout.LayoutParams(MATCH, WRAP))
-        content.addView(dock, LinearLayout.LayoutParams(MATCH, WRAP))
+        // Margens negativas: a faixa encosta nas bordas da tela (esquerda, direita e embaixo)
+        content.addView(
+            dock,
+            LinearLayout.LayoutParams(MATCH, WRAP).apply {
+                leftMargin = -dp(56)
+                rightMargin = -dp(56)
+                bottomMargin = -dp(26)
+                topMargin = dp(6)
+            },
+        )
 
         saver = buildSaver()
         root.addView(saver, FrameLayout.LayoutParams(MATCH, MATCH))
@@ -435,11 +720,10 @@ class MainActivity : Activity() {
     private fun makeTab(label: String, index: Int): TextView =
         TextView(this).apply {
             text = label
-            textSize = 17f
-            setPadding(dp(14), dp(6), dp(14), dp(6))
+            textSize = 22f
+            setPadding(dp(18), dp(8), dp(18), dp(8))
             isFocusable = true
             isClickable = true
-            background = rounded(Color.TRANSPARENT, 20)
             setOnFocusChangeListener { _, has ->
                 if (has) selectTab(index)
                 styleTabs()
@@ -447,24 +731,59 @@ class MainActivity : Activity() {
             setOnClickListener { selectTab(index) }
         }
 
-    private fun styleTabs() {
+    private lateinit var tabPill: View
+    private val tabPillBg = GradientDrawable().apply { cornerRadius = 1000f }
+    private var pillCor = Color.TRANSPARENT
+    private var pillAnim: android.animation.ValueAnimator? = null
+
+    /** A pílula preta (selecionada) ou cinza clarinha (aba atual) escorrega até a aba certa. */
+    private fun styleTabs(animar: Boolean = true) {
+        var alvo: TextView? = null
+        var corAlvo = Cores.sutil
         tabs.forEachIndexed { i, t ->
-            val bg = t.background as GradientDrawable
             when {
                 t.isFocused -> {
-                    bg.setColor(INK)
                     t.setTextColor(Cores.papel)
+                    alvo = t
+                    corAlvo = INK
                 }
-                i == currentTab -> {
-                    bg.setColor(Cores.sutil)
-                    t.setTextColor(INK)
-                }
-                else -> {
-                    bg.setColor(Color.TRANSPARENT)
-                    t.setTextColor(GRAY)
-                }
+                i == currentTab -> t.setTextColor(INK)
+                else -> t.setTextColor(GRAY)
             }
             t.typeface = if (i == currentTab) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        }
+        val t = alvo ?: tabs.getOrNull(currentTab) ?: return
+        if (!::tabPill.isInitialized || t.width == 0) return
+        val lp = tabPill.layoutParams as FrameLayout.LayoutParams
+        val x0 = tabPill.translationX
+        val w0 = lp.width.toFloat()
+        val c0 = pillCor
+        val x1 = t.left.toFloat()
+        val w1 = t.width.toFloat()
+        lp.height = t.height
+        lp.topMargin = t.top
+        pillAnim?.cancel()
+        if (!animar || w0 == 0f) {
+            tabPill.translationX = x1
+            lp.width = t.width
+            tabPill.layoutParams = lp
+            pillCor = corAlvo
+            tabPillBg.setColor(corAlvo)
+            return
+        }
+        val cores = android.animation.ArgbEvaluator()
+        pillAnim = android.animation.ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 280
+            interpolator = android.view.animation.DecelerateInterpolator(1.6f)
+            addUpdateListener {
+                val f = it.animatedValue as Float
+                tabPill.translationX = x0 + (x1 - x0) * f
+                lp.width = (w0 + (w1 - w0) * f).toInt()
+                tabPill.layoutParams = lp
+                pillCor = cores.evaluate(f, c0, corAlvo) as Int
+                tabPillBg.setColor(pillCor)
+            }
+            start()
         }
     }
 
@@ -482,7 +801,7 @@ class MainActivity : Activity() {
             setOnClickListener { onClick() }
             setOnFocusChangeListener { v, has ->
                 bg.setColor(if (has) PRETO else Color.TRANSPARENT)
-                icon.setColorFilter(if (has) Color.WHITE else PRETO)
+                icon.setColorFilter(if (has) Cores.papel else PRETO)
                 v.animate().scaleX(if (has) 1.08f else 1f).scaleY(if (has) 1.08f else 1f).setDuration(120).start()
             }
         }
@@ -538,7 +857,7 @@ class MainActivity : Activity() {
             return
         }
         if (!force) status("Carregando…")
-        Tmdb.list(currentTab) { items ->
+        Tmdb.list(currentTab, infantil = prefs.crianca(prefs.perfil)) { items ->
             if (token != loadToken) return@list
             if (items.isEmpty()) {
                 showCards(fallbackCards(), "Sem conexão com o TMDB agora · mostrando seus apps")
@@ -575,25 +894,115 @@ class MainActivity : Activity() {
     private fun showCards(cards: List<Card>, note: String?) {
         showingFallback = cards.any { it.app != null }
         fixedLayout = !showingFallback
+        // Explorar, Filmes e Séries: fileira infinita (depois do último vem o primeiro de novo)
+        looping = currentTab != TAB_CONTINUAR && cards.size >= 3
+        loopCards = cards
+        loopNote = note
         // Sem espaço em branco no fim da fileira de filmes
-        cardsRow.setPadding(0, dp(26), if (fixedLayout) dp(8) else resources.displayMetrics.widthPixels, dp(8))
+        cardsRow.setPadding(0, dp(26), if (fixedLayout || looping) dp(8) else resources.displayMetrics.widthPixels, dp(8))
         status(note)
         val focusWasHere = cardsRow.hasFocus()
         cardsRow.removeAllViews()
         selected = null
         cardsScroll.scrollTo(0, 0)
-        cards.forEachIndexed { i, c ->
-            val v = makeCard(c)
-            val w = if (fixedLayout && i < 2) bigW else narrowW
-            val lp = LinearLayout.LayoutParams(w, WRAP)
-            lp.rightMargin = dp(26)
-            cardsRow.addView(v, lp)
-        }
-        val first = cardsRow.getChildAt(0) ?: return
+        // Três voltas: começa na do meio, para poder ir para os dois lados
+        repeat(if (looping) 3 else 1) { addRound(atStart = false) }
+        val first = cardsRow.getChildAt(if (looping) cards.size else 0) ?: return
         select(first, animate = false)
+        if (looping) afterLayout { cardsScroll.scrollTo((first.left - if (fixedLayout) 0 else dp(4)).coerceAtLeast(0), 0) }
+        cascata(cardsRow.indexOfChild(first))
         if (firstLoad || focusWasHere || currentFocus == null) {
             firstLoad = false
             first.post { (first as ViewGroup).getChildAt(0).requestFocus() }
+        }
+    }
+
+    private fun cardWidth(i: Int): Int = if (fixedLayout && i < 2) bigW else narrowW
+
+    private fun roundWidth(): Int = loopCards.indices.sumOf { cardWidth(it) + dp(26) }
+
+    /** Coloca uma volta inteira da lista no fim ou no começo da fileira. */
+    /**
+     * Transição 4 "Cascata": ao trocar de aba, os cartazes que aparecem na tela
+     * entram um depois do outro, subindo de leve.
+     */
+    private fun cascata(inicio: Int) {
+        val de = inicio.coerceAtLeast(0)
+        val ate = (de + 6).coerceAtMost(cardsRow.childCount)
+        for (i in de until ate) {
+            val v = cardsRow.getChildAt(i)
+            v.alpha = 0f
+            v.translationY = dpf(16)
+            v.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setStartDelay(((i - de) * 70).toLong())
+                .setDuration(360)
+                .setInterpolator(android.view.animation.DecelerateInterpolator(1.8f))
+                .start()
+        }
+    }
+
+    private fun addRound(atStart: Boolean) {
+        loopCards.forEachIndexed { i, c ->
+            val lp = LinearLayout.LayoutParams(cardWidth(i), WRAP)
+            lp.rightMargin = dp(26)
+            if (atStart) cardsRow.addView(makeCard(c), i, lp) else cardsRow.addView(makeCard(c), lp)
+        }
+    }
+
+    private fun removeRound(atStart: Boolean) {
+        val n = loopCards.size
+        if (atStart) cardsRow.removeViews(0, n) else cardsRow.removeViews(cardsRow.childCount - n, n)
+    }
+
+    private fun afterLayout(block: () -> Unit) {
+        cardsScroll.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                cardsScroll.viewTreeObserver.removeOnPreDrawListener(this)
+                block()
+                return true
+            }
+        })
+    }
+
+    /** Desloca a rolagem quando a fileira cresce/encolhe à esquerda, sem pulo na tela. */
+    private fun shiftScroll(before: Int, dx: Int) {
+        afterLayout {
+            cardsScroll.smoothScrollBy(0, 0) // para a animação antiga
+            cardsScroll.scrollTo(before + dx, 0)
+            val item = selected ?: return@afterLayout
+            val r = android.graphics.Rect(item.left, item.top, item.right, item.bottom)
+            cardsScroll.requestChildRectangleOnScreen(cardsRow, r, false)
+        }
+    }
+
+    /** Perto da ponta da fileira? Coloca mais uma volta para nunca acabar. */
+    private fun onRowFocus(now: View?) {
+        if (!looping) return
+        val item = now?.parent as? View ?: return
+        if (item.parent !== cardsRow) return
+        val n = loopCards.size
+        val edge = minOf(n, 8)
+        val idx = cardsRow.indexOfChild(item)
+        if (idx >= cardsRow.childCount - edge) {
+            cardsRow.post {
+                if (!looping) return@post
+                addRound(atStart = false)
+                if (cardsRow.childCount > n * MAX_VOLTAS) {
+                    val before = cardsScroll.scrollX
+                    removeRound(atStart = true)
+                    shiftScroll(before, -roundWidth())
+                }
+            }
+        } else if (idx < edge) {
+            cardsRow.post {
+                if (!looping) return@post
+                val before = cardsScroll.scrollX
+                addRound(atStart = true)
+                shiftScroll(before, roundWidth())
+                if (cardsRow.childCount > n * MAX_VOLTAS) removeRound(atStart = false)
+            }
         }
     }
 
@@ -654,14 +1063,33 @@ class MainActivity : Activity() {
             }
         }
 
-        val focusRing = ring(18)
+        // Card 2 "Flutuando": parado tem uma borda bem fina; selecionado sobe,
+        // cresce um pouco, ganha borda clara por dentro e sombra funda
+        val bordaFina = GradientDrawable().apply {
+            cornerRadius = dpf(18)
+            setColor(Color.TRANSPARENT)
+            setStroke(dp(1), 0x1A000000)
+        }
+        val bordaClara = GradientDrawable().apply {
+            cornerRadius = dpf(18)
+            setColor(Color.TRANSPARENT)
+            setStroke(dp(2), 0x8CFFFFFF.toInt())
+        }
+        frame.foreground = bordaFina
+        frame.elevation = dpf(2)
+        if (android.os.Build.VERSION.SDK_INT >= 28) {
+            frame.outlineSpotShadowColor = Color.BLACK
+            frame.outlineAmbientShadowColor = Color.BLACK
+        }
         frame.setOnFocusChangeListener { v, has ->
-            v.foreground = if (has) focusRing else null
+            v.foreground = if (has) bordaClara else bordaFina
             v.animate()
-                .scaleX(if (has) 1.03f else 1f)
-                .scaleY(if (has) 1.03f else 1f)
-                .translationZ(if (has) dpf(20) else 0f)
-                .setDuration(180)
+                .scaleX(if (has) 1.06f else 1f)
+                .scaleY(if (has) 1.06f else 1f)
+                .translationY(if (has) -dpf(10) else 0f)
+                .translationZ(if (has) dpf(26) else 0f)
+                .setInterpolator(android.view.animation.DecelerateInterpolator(1.6f))
+                .setDuration(220)
                 .start()
             if (has) {
                 select(item, animate = true)
@@ -791,7 +1219,7 @@ class MainActivity : Activity() {
     /** Tamanho dos blocos do dock: 7 apps + "Todos" cabem sem rolar. */
     private fun dockSize(): Pair<Int, Int> {
         val gap = dp(DOCK_GAP)
-        val avail = resources.displayMetrics.widthPixels - dp(112) - dp(32) - dp(16)
+        val avail = resources.displayMetrics.widthPixels - dp(96) - dp(16)
         val w = ((avail - gap * DOCK_APPS) / (DOCK_APPS + 9f / 16f)).toInt()
         val h = w * 9 / 16
         return w to h
@@ -804,9 +1232,18 @@ class MainActivity : Activity() {
         return lp
     }
 
+    /** Borda bem fina igual em todos os blocos da barra (todos do mesmo tamanho). */
+    private fun bordaDock() = GradientDrawable().apply {
+        cornerRadius = dpf(12)
+        setColor(Color.TRANSPARENT)
+        setStroke(dp(1), 0x1A000000)
+    }
+
     private fun dockTile(e: AppEntry): View {
         val card = FrameLayout(this).apply {
-            background = rounded(0xFF2C2C2E.toInt(), 14)
+            // Barra 1: todos os blocos 16:9, mesmo fundo claro e mesma borda fina
+            background = rounded(Cores.janela, 12)
+            foreground = bordaDock()
             clipToOutline = true
             isFocusable = true
             isClickable = true
@@ -828,13 +1265,13 @@ class MainActivity : Activity() {
             }
             col.addView(
                 ImageView(this).apply { setImageDrawable(AppRepo.icon(this@MainActivity, e)) },
-                LinearLayout.LayoutParams(dp(30), dp(30)),
+                LinearLayout.LayoutParams(dp(28), dp(28)),
             )
             col.addView(
                 TextView(this).apply {
                     text = e.label
                     textSize = 11f
-                    setTextColor(Color.WHITE)
+                    setTextColor(INK)
                     gravity = Gravity.CENTER
                     maxLines = 1
                     ellipsize = TextUtils.TruncateAt.END
@@ -864,7 +1301,8 @@ class MainActivity : Activity() {
 
     private fun moreTile(): View {
         val card = FrameLayout(this).apply {
-            background = rounded(Cores.sutil, 14)
+            background = rounded(Cores.campo, 12)
+            foreground = bordaDock()
             clipToOutline = true
             isFocusable = true
             isClickable = true
@@ -899,9 +1337,15 @@ class MainActivity : Activity() {
     }
 
     private fun styleDockFocus(card: View) {
-        val r = ring(14)
+        // Selecionado: contorno preto (no fundo branco o anel branco sumiria)
+        val r = GradientDrawable().apply {
+            cornerRadius = dpf(12)
+            setColor(Color.TRANSPARENT)
+            setStroke(dp(3), INK)
+        }
+        val normal = card.foreground
         card.setOnFocusChangeListener { v, has ->
-            v.foreground = if (has) r else null
+            v.foreground = if (has) r else normal
             v.animate()
                 .scaleX(if (has) 1.15f else 1f)
                 .scaleY(if (has) 1.15f else 1f)
@@ -942,13 +1386,71 @@ class MainActivity : Activity() {
 
     // ---------- perfis: janela branca e limpa ----------
 
+    // ---------- versão nova ----------
+
+    private fun avisarAtualizacao(v: Atualizacao.Versao) {
+        val (d, box) = whiteDialog()
+        box.addView(dialogTitle("Versão nova!"))
+        val info = TextView(this).apply {
+            text = "${v.nome} está disponível.\nVocê tem a versão 1.${BuildConfig.VERSION_CODE}."
+            textSize = 16f
+            setTextColor(GRAY)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(10), 0, dp(18))
+        }
+        box.addView(info)
+        val row = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+        }
+        var baixando = false
+        val atualizar = pill("Atualizar") {
+            if (baixando) return@pill
+            if (android.os.Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
+                // Primeira vez: a TV precisa deixar o Início TV instalar atualizações
+                toast("Permita o Início TV instalar apps e aperte Atualizar de novo")
+                try {
+                    startActivity(
+                        Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:$packageName"))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                } catch (_: Throwable) {
+                    toast("Libere \"Fontes desconhecidas\" para o Início TV nas Configurações")
+                }
+                return@pill
+            }
+            baixando = true
+            info.text = "Baixando… 0%"
+            Atualizacao.baixar(this, v, progresso = { info.text = "Baixando… $it%" }) { f ->
+                baixando = false
+                if (f == null) {
+                    info.text = "Não consegui baixar. Confira a internet e tente de novo."
+                } else {
+                    d.dismiss()
+                    if (!Atualizacao.instalar(this)) toast("Não consegui abrir o instalador")
+                }
+            }
+        }
+        val depois = pill("Depois") {
+            Atualizacao.adiar(this, v)
+            d.dismiss()
+        }
+        val lp = LinearLayout.LayoutParams(WRAP, WRAP)
+        lp.rightMargin = dp(12)
+        row.addView(atualizar, lp)
+        row.addView(depois, LinearLayout.LayoutParams(WRAP, WRAP))
+        box.addView(row)
+        d.show()
+        atualizar.requestFocus()
+    }
+
     private fun whiteDialog(): Pair<android.app.Dialog, LinearLayout> {
         val d = android.app.Dialog(this)
         d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            background = rounded(Color.WHITE, 28)
+            background = rounded(Cores.janela, 28)
             setPadding(dp(44), dp(30), dp(44), dp(28))
             elevation = dpf(24)
         }
@@ -969,7 +1471,7 @@ class MainActivity : Activity() {
 
     /** Botão em pílula: cinza-claro, fica preto quando selecionado. */
     private fun pill(text: String, onClick: () -> Unit): TextView {
-        val bg = rounded(0xFFF2F2F7.toInt(), 22)
+        val bg = rounded(Cores.campo, 22)
         return TextView(this).apply {
             this.text = text
             textSize = 16f
@@ -981,8 +1483,8 @@ class MainActivity : Activity() {
             isClickable = true
             setOnClickListener { onClick() }
             setOnFocusChangeListener { v, has ->
-                bg.setColor(if (has) PRETO else 0xFFF2F2F7.toInt())
-                setTextColor(if (has) Color.WHITE else PRETO)
+                bg.setColor(if (has) PRETO else Cores.campo)
+                setTextColor(if (has) Cores.papel else PRETO)
                 v.animate().scaleX(if (has) 1.06f else 1f).scaleY(if (has) 1.06f else 1f).setDuration(120).start()
             }
         }
@@ -1007,61 +1509,102 @@ class MainActivity : Activity() {
             layoutParams = FrameLayout.LayoutParams(dp(sizeDp), dp(sizeDp), Gravity.CENTER)
         }
 
-    /** Quem está assistindo? Três bolinhas e o botão Editar perfil. */
+    /** Quem está assistindo? Três carinhas grandes e o botão Editar perfil. */
     private fun showProfiles() {
         val atual = prefs.perfil
         val (d, box) = whiteDialog()
+        box.setPadding(dp(56), dp(34), dp(56), dp(30))
+        box.clipChildren = false
+        box.clipToPadding = false
         box.addView(dialogTitle("Quem está assistindo?"))
 
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            setPadding(0, dp(26), 0, dp(24))
+            setPadding(0, dp(30), 0, dp(26))
             clipChildren = false
             clipToPadding = false
         }
         var focusMe: View? = null
         for (i in 0 until Prefs.PERFIS) {
+            // Anel com folga em volta da carinha: cinza no perfil atual, preto e grosso no selecionado
             val ringBg = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(Color.TRANSPARENT)
-                if (i == atual) setStroke(dp(3), 0xFFD1D1D6.toInt())
+                if (i == atual) setStroke(dp(3), Cores.sutil or 0x33000000)
             }
-            val holder = FrameLayout(this).apply { background = ringBg }
-            holder.addView(avatarCircle(i, 76, 30f))
+            val holder = FrameLayout(this).apply {
+                background = ringBg
+                setPadding(dp(8), dp(8), dp(8), dp(8))
+                clipChildren = false
+            }
+            holder.addView(avatarCircle(i, 100, 38f))
             val name = TextView(this).apply {
                 text = prefs.nome(i)
-                textSize = 16f
-                setTextColor(PRETO)
+                textSize = 17f
+                setTextColor(if (i == atual) PRETO else GRAY)
                 gravity = Gravity.CENTER
                 maxLines = 1
                 ellipsize = TextUtils.TruncateAt.END
-                typeface = if (i == atual) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-                setPadding(0, dp(10), 0, 0)
+                typeface = if (i == atual) Typeface.create("sans-serif-medium", Typeface.BOLD) else Typeface.DEFAULT
+                setPadding(0, dp(14), 0, 0)
+            }
+            // Etiqueta embaixo do nome: "Assistindo" no atual, "Criança" no perfil infantil
+            val etiqueta = TextView(this).apply {
+                textSize = 12f
+                gravity = Gravity.CENTER
+                setPadding(dp(10), dp(3), dp(10), dp(3))
+                when {
+                    prefs.crianca(i) -> {
+                        text = "Criança"
+                        setTextColor(Color.WHITE)
+                        background = rounded(0xFFFF9500.toInt(), 12)
+                    }
+                    i == atual -> {
+                        text = "Assistindo"
+                        setTextColor(GRAY)
+                        background = rounded(Cores.campo, 12)
+                    }
+                    else -> visibility = View.INVISIBLE
+                }
             }
             val col = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER_HORIZONTAL
                 isFocusable = true
                 isClickable = true
-                setPadding(dp(10), dp(6), dp(10), dp(6))
+                clipChildren = false
+                clipToPadding = false
+                setPadding(dp(12), dp(8), dp(12), dp(8))
                 setOnClickListener {
+                    val mudouTipo = prefs.crianca(i) != prefs.crianca(prefs.perfil)
                     prefs.perfil = i
                     avisarLumi()
                     refreshProfile()
+                    mostrarLembretes()
                     refreshApps()
+                    // Trocou entre adulto e criança: troca os cartazes também
+                    if (mudouTipo) loadCards(force = true)
                     d.dismiss()
                 }
                 setOnFocusChangeListener { _, has ->
-                    ringBg.setStroke(dp(3), if (has) PRETO else if (i == atual) 0xFFD1D1D6.toInt() else Color.TRANSPARENT)
-                    holder.animate().scaleX(if (has) 1.1f else 1f).scaleY(if (has) 1.1f else 1f).setDuration(140).start()
+                    ringBg.setStroke(
+                        if (has) dp(5) else dp(3),
+                        if (has) PRETO else if (i == atual) (Cores.sutil or 0x33000000) else Color.TRANSPARENT,
+                    )
+                    name.setTextColor(if (has || i == atual) PRETO else GRAY)
+                    holder.animate().scaleX(if (has) 1.08f else 1f).scaleY(if (has) 1.08f else 1f)
+                        .translationZ(if (has) dpf(6) else 0f).setDuration(160).start()
                 }
             }
-            col.addView(holder, LinearLayout.LayoutParams(dp(88), dp(88)))
-            col.addView(name, LinearLayout.LayoutParams(dp(110), WRAP))
+            col.addView(holder, LinearLayout.LayoutParams(dp(116), dp(116)))
+            col.addView(name, LinearLayout.LayoutParams(dp(150), WRAP))
+            val elp = LinearLayout.LayoutParams(WRAP, WRAP)
+            elp.topMargin = dp(6)
+            col.addView(etiqueta, elp)
             val lp = LinearLayout.LayoutParams(WRAP, WRAP)
-            lp.leftMargin = dp(10)
-            lp.rightMargin = dp(10)
+            lp.leftMargin = dp(8)
+            lp.rightMargin = dp(8)
             row.addView(col, lp)
             if (i == atual) focusMe = col
         }
@@ -1096,7 +1639,7 @@ class MainActivity : Activity() {
             setHintTextColor(0xFF8E8E93.toInt())
             hint = "Nome"
             gravity = Gravity.CENTER
-            background = rounded(0xFFF2F2F7.toInt(), 14)
+            background = rounded(Cores.campo, 14)
             setPadding(dp(16), dp(9), dp(16), dp(9))
         }
         box.addView(input, LinearLayout.LayoutParams(dp(300), WRAP))
@@ -1308,7 +1851,7 @@ class MainActivity : Activity() {
         saver.visibility = View.VISIBLE
         saver.animate().alpha(1f).setDuration(600).start()
         if (Tmdb.enabled) {
-            Tmdb.list(0) { items ->
+            Tmdb.list(0, infantil = prefs.crianca(prefs.perfil)) { items ->
                 saverItems = items
                 handler.removeCallbacks(saverNext)
                 handler.post(saverNext)
@@ -1411,9 +1954,9 @@ class MainActivity : Activity() {
         android.os.Build.MANUFACTURER.equals("Amazon", true) ||
             packageManager.hasSystemFeature("amazon.hardware.fire_tv")
 
-    // ---------- medidor no canto de baixo: internet (Mb/s) e FPS da tela ----------
+    // ---------- medidor de FPS no canto de baixo ----------
 
-    private lateinit var meterText: TextView
+    private lateinit var meterDot: GradientDrawable
     private var meterOn = false
     private var frames = 0
     private var lastRx = 0L
@@ -1428,37 +1971,42 @@ class MainActivity : Activity() {
         override fun run() {
             if (!meterOn) return
             val now = android.os.SystemClock.elapsedRealtime()
-            val rx = TrafficStats.getTotalRxBytes()
             val secs = ((now - lastT) / 1000f).coerceAtLeast(0.2f)
-            val mbps = if (rx >= 0 && lastRx >= 0 && lastT > 0) (rx - lastRx) * 8f / 1_000_000f / secs else 0f
             val fps = Math.round(frames / secs)
-            lastRx = rx
             lastT = now
             frames = 0
-            val net = if (mbps >= 10) "%.0f".format(ptBr, mbps) else "%.1f".format(ptBr, mbps)
-            meterText.text = "↓ $net Mb/s  ·  $fps FPS"
+            // Verde = liso, laranja = médio, vermelho = travando
+            meterDot.setColor(
+                when {
+                    fps >= 50 -> 0xFF34C759.toInt()
+                    fps >= 30 -> 0xFFFF9500.toInt()
+                    else -> 0xFFFF3B30.toInt()
+                },
+            )
             handler.postDelayed(this, 1000)
         }
     }
 
+    /** Só um pontinho no canto de baixo, abaixo da barra de apps. */
     private fun buildMeter() {
-        meterText = TextView(this).apply {
-            textSize = 12f
-            setTextColor(0xFF8E8E93.toInt())
-            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
-            setShadowLayer(dpf(6), 0f, 0f, Color.WHITE)
+        meterDot = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(0xFF34C759.toInt())
         }
-        val lp = FrameLayout.LayoutParams(WRAP, WRAP, Gravity.BOTTOM or Gravity.END)
-        lp.marginEnd = dp(20)
-        lp.bottomMargin = dp(8)
-        addContentView(meterText, lp)
+        val dot = View(this).apply {
+            background = meterDot
+            elevation = dpf(1)
+        }
+        val lp = FrameLayout.LayoutParams(dp(9), dp(9), Gravity.BOTTOM or Gravity.END)
+        lp.marginEnd = dp(24)
+        lp.bottomMargin = dp(9)
+        addContentView(dot, lp)
     }
 
     private fun startMeter() {
         if (meterOn) return
         meterOn = true
         frames = 0
-        lastRx = TrafficStats.getTotalRxBytes()
         lastT = android.os.SystemClock.elapsedRealtime()
         Choreographer.getInstance().postFrameCallback(frameCb)
         handler.postDelayed(meterTick, 1000)
@@ -1621,8 +2169,10 @@ class MainActivity : Activity() {
         private const val DESTAQUES = 3
         private val INK: Int get() = Cores.tinta
         private val GRAY: Int get() = Cores.cinza
-        private const val PRETO = 0xFF1C1C1E.toInt()
+        /** Texto e ícones: preto no claro, branco no escuro. */
+        private val PRETO: Int get() = Cores.tinta
         private const val TAB_CONTINUAR = 3
+        private const val MAX_VOLTAS = 5
         /** Mude para true para o fundo pegar as cores do filme selecionado */
         private const val FUNDO_COM_FILME = false
         /** Os 15 avatares desenhados: 0-4 feminino, 5-9 masculino, 10-14 infantil */
@@ -1632,7 +2182,7 @@ class MainActivity : Activity() {
             R.drawable.avatar_10, R.drawable.avatar_11, R.drawable.avatar_12, R.drawable.avatar_13, R.drawable.avatar_14,
         )
         private const val DOCK_APPS = 7
-        private const val DOCK_GAP = 12
+        private const val DOCK_GAP = 16
         /** Tempo parado até o descanso de tela (3 minutos) */
         private const val IDLE_MS = 3 * 60_000L
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
