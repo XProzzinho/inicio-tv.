@@ -367,47 +367,40 @@ class MainActivity : Activity() {
         blocos.first().requestFocus()
     }
 
-    /** Brilho na lateral direita, estilo ANEL: círculo que enche com o sol e o número no meio; − + e 100% embaixo.
-     *  ▲ ▼ mudam de 10 em 10; ◀ ▶ andam entre os botões; OK aperta; some sozinho. */
+    /** Brilho na lateral direita: só o ANEL e o número no meio, sem caixa (fundo transparente).
+     *  ▲ ▶ aumentam, ▼ ◀ abaixam (de 10 em 10); OK ou Voltar fecha; some sozinho. */
     private fun abrirBrilho() {
         val d = android.app.Dialog(this)
         d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            background = rounded(Cores.janela, 30)
-            setPadding(dp(24), dp(18), dp(24), dp(20))
-            elevation = dpf(24)
-        }
-        box.addView(TextView(this).apply {
-            text = "Brilho"
-            gravity = Gravity.CENTER
-            textSize = 20f
-            setTextColor(PRETO)
-            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-        }, LinearLayout.LayoutParams(MATCH, WRAP))
         var nivel = Brilho.atual(this)
         val anel = object : View(this) {
-            val fundo = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { style = android.graphics.Paint.Style.STROKE; color = Cores.campo; strokeWidth = dpf(14) }
-            val cheio = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { style = android.graphics.Paint.Style.STROKE; color = PRETO; strokeWidth = dpf(14); strokeCap = android.graphics.Paint.Cap.ROUND }
-            val txt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = PRETO; textAlign = android.graphics.Paint.Align.CENTER; textSize = dpf(34); typeface = Typeface.create("sans-serif-medium", Typeface.BOLD) }
-            val sol = this@MainActivity.getDrawable(R.drawable.ic_brilho)?.mutate()?.apply { setTint(PRETO) }
+            val sombra = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { style = android.graphics.Paint.Style.STROKE; color = 0x33000000; strokeWidth = dpf(20) }
+            val fundo = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { style = android.graphics.Paint.Style.STROKE; color = 0x99FFFFFF.toInt(); strokeWidth = dpf(14) }
+            val cheio = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { style = android.graphics.Paint.Style.STROKE; color = PRETO; strokeWidth = dpf(14); strokeCap = android.graphics.Paint.Cap.ROUND; setShadowLayer(dpf(6), 0f, dpf(2), 0x55000000) }
+            val txt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = PRETO; textAlign = android.graphics.Paint.Align.CENTER; textSize = dpf(40); typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); setShadowLayer(dpf(8), 0f, 0f, 0xCCFFFFFF.toInt()) }
             val r = android.graphics.RectF()
+            init { setLayerType(LAYER_TYPE_SOFTWARE, null) }
             override fun onDraw(c: android.graphics.Canvas) {
-                val m = dpf(10); r.set(m, m, width - m, height - m)
+                val m = dpf(14); r.set(m, m, width - m, height - m)
+                c.drawArc(r, 0f, 360f, false, sombra)
                 c.drawArc(r, 0f, 360f, false, fundo)
                 c.drawArc(r, -90f, 360f * nivel / 100f, false, cheio)
-                val cx = width / 2; val s = dp(26)
-                sol?.setBounds(cx - s / 2, (height * 0.26f).toInt(), cx + s / 2, (height * 0.26f).toInt() + s); sol?.draw(c)
-                c.drawText("$nivel%", width / 2f, height * 0.68f, txt)
+                c.drawText("$nivel%", width / 2f, height / 2f - (txt.descent() + txt.ascent()) / 2f, txt)
             }
         }
-        box.addView(anel, LinearLayout.LayoutParams(dp(170), dp(170)).apply { topMargin = dp(8); bottomMargin = dp(14) })
+        d.setContentView(anel, android.view.ViewGroup.LayoutParams(dp(180), dp(180)))
+        d.window?.apply {
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            setDimAmount(0f)
+            setGravity(Gravity.END or Gravity.CENTER_VERTICAL)
+            attributes = attributes.apply { x = dp(50) }
+            setLayout(dp(180), dp(180))
+        }
         val fecha = Runnable { if (d.isShowing) d.dismiss() }
-        fun tempo() { handler.removeCallbacks(fecha); handler.postDelayed(fecha, 6000) }
-        fun muda(passo: Int?, fixo: Int? = null) {
-            val alvo = fixo ?: (Brilho.atual(this) + (passo ?: 0))
+        fun tempo() { handler.removeCallbacks(fecha); handler.postDelayed(fecha, 4000) }
+        fun muda(passo: Int) {
             tempo()
+            val alvo = Brilho.atual(this) + passo
             if (alvo < 100 && Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(this)) {
                 Toast.makeText(this, "Libere \"Sobrepor a outros apps\" pro Início TV", Toast.LENGTH_LONG).show()
                 try { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:$packageName"))) } catch (_: Throwable) {}
@@ -415,31 +408,17 @@ class MainActivity : Activity() {
             }
             nivel = Brilho.aplicar(this, alvo); anel.invalidate()
         }
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        fun bola(t: String, larg: Int, acao: () -> Unit) = pill(t) { acao() }.apply { textSize = if (t.length == 1) 24f else 16f; setPadding(0, dp(8), 0, dp(8)) }.also { row.addView(it, LinearLayout.LayoutParams(dp(larg), dp(48)).apply { if (row.childCount > 0) leftMargin = dp(10) }) }
-        bola("−", 56) { muda(-10) }
-        val mais = bola("+", 56) { muda(10) }
-        bola("100%", 74) { muda(null, 100) }
-        box.addView(row, LinearLayout.LayoutParams(WRAP, WRAP).apply { bottomMargin = dp(4) })
-        d.setContentView(box)
-        d.window?.apply {
-            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
-            setDimAmount(0f)
-            setGravity(Gravity.END or Gravity.CENTER_VERTICAL)
-            attributes = attributes.apply { x = dp(40) }
-            setLayout(dp(280), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
-        }
         d.setOnKeyListener { _, code, ev ->
             if (ev.action != android.view.KeyEvent.ACTION_DOWN) return@setOnKeyListener false
             when (code) {
-                android.view.KeyEvent.KEYCODE_DPAD_UP -> { muda(10); true }
-                android.view.KeyEvent.KEYCODE_DPAD_DOWN -> { muda(-10); true }
-                else -> { tempo(); false }
+                android.view.KeyEvent.KEYCODE_DPAD_UP, android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> { muda(10); true }
+                android.view.KeyEvent.KEYCODE_DPAD_DOWN, android.view.KeyEvent.KEYCODE_DPAD_LEFT -> { muda(-10); true }
+                android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER -> { d.dismiss(); true }
+                else -> false
             }
         }
         d.setOnDismissListener { handler.removeCallbacks(fecha) }
         d.show()
-        mais.requestFocus()
         tempo()
     }
 
