@@ -45,7 +45,7 @@ object Cores {
         }
 
     // Peças
-    val barra: Int get() = if (escuro) 0x1AFFFFFF else 0xFFFFFFFF.toInt()
+    val barra: Int get() = if (escuro) 0x8C080E1C.toInt() else 0xFFFFFFFF.toInt()
     val botao: Int get() = if (escuro) 0x33FFFFFF else 0xCCFFFFFF.toInt()
     val cartao: Int get() = if (escuro) 0xFF1C2740.toInt() else 0xFFE5E5EA.toInt()
     val cartaoApp: Int get() = if (escuro) 0xFF1C2740.toInt() else 0xFFFFFFFF.toInt()

@@ -2340,30 +2340,34 @@ class MainActivity : Activity() {
     }
 }
 
-/** Fundo do modo escuro: brilhos azulados e estrelinhas que piscam devagar (leve, 10 quadros por segundo). */
+/** Fundo do modo escuro: brilhos azulados (desenhados uma vez só) e estrelinhas que piscam devagar. */
 class Estrelas(ctx: Context) : View(ctx) {
     private val rnd = java.util.Random(7)
-    private val pts = Array(90) { floatArrayOf(rnd.nextFloat(), rnd.nextFloat() * 0.75f, 0.6f + rnd.nextFloat() * 1.8f, rnd.nextFloat() * 6.28f, 0.5f + rnd.nextFloat()) }
+    private val pts = Array(80) { floatArrayOf(rnd.nextFloat(), rnd.nextFloat() * 0.75f, 0.6f + rnd.nextFloat() * 1.8f, rnd.nextFloat() * 6.28f, 0.4f + rnd.nextFloat() * 0.8f) }
     private val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-    private val brilho = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    private var fundo: android.graphics.Bitmap? = null
     private val t0 = System.currentTimeMillis()
+    override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
+        if (w <= 0 || h <= 0) return
+        // brilhos em meia resolução (mais leve) e esticados na hora de desenhar
+        val b = android.graphics.Bitmap.createBitmap(w / 2, h / 2, android.graphics.Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(b); val g = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        fun glow(x: Float, y: Float, r: Float, cor: Int) { g.shader = android.graphics.RadialGradient(x, y, r, cor, 0, android.graphics.Shader.TileMode.CLAMP); c.drawCircle(x, y, r, g) }
+        val W = b.width.toFloat(); val H = b.height.toFloat()
+        glow(W * 0.42f, H * 0.48f, W * 0.38f, 0x332E5BFF); glow(W * 0.86f, H * 0.22f, W * 0.22f, 0x2240A0FF); glow(W * 0.10f, H * 0.10f, W * 0.18f, 0x1A9A6BFF)
+        fundo = b
+    }
+    private val dst = android.graphics.Rect()
     override fun onDraw(c: android.graphics.Canvas) {
         val w = width.toFloat(); val h = height.toFloat(); if (w <= 0f) return
+        fundo?.let { dst.set(0, 0, width, height); c.drawBitmap(it, null, dst, null) }
         val d = resources.displayMetrics.density
-        fun glow(x: Float, y: Float, r: Float, cor: Int) {
-            brilho.shader = android.graphics.RadialGradient(x, y, r, cor, 0x00000000, android.graphics.Shader.TileMode.CLAMP)
-            c.drawCircle(x, y, r, brilho)
-        }
-        glow(w * 0.42f, h * 0.48f, w * 0.38f, 0x332E5BFF)
-        glow(w * 0.86f, h * 0.22f, w * 0.22f, 0x2240A0FF)
-        glow(w * 0.10f, h * 0.10f, w * 0.18f, 0x1A9A6BFF)
         val t = (System.currentTimeMillis() - t0) / 1000f
         for (s in pts) {
-            val a = (0.35f + 0.65f * (0.5f + 0.5f * kotlin.math.sin(t * s[4] + s[3])))
+            val a = 0.35f + 0.65f * (0.5f + 0.5f * kotlin.math.sin(t * s[4] + s[3]))
             p.color = Color.argb((a * 200).toInt(), 255, 244, 214)
             c.drawCircle(s[0] * w, s[1] * h, s[2] * d * 0.9f, p)
         }
-        postInvalidateDelayed(100)
+        postInvalidateDelayed(200)
     }
 }
-
