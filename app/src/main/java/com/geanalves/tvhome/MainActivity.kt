@@ -379,7 +379,7 @@ class MainActivity : Activity() {
             val cheio = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { style = android.graphics.Paint.Style.STROKE; color = PRETO; strokeWidth = dpf(14); strokeCap = android.graphics.Paint.Cap.ROUND; setShadowLayer(dpf(6), 0f, dpf(2), 0x55000000) }
             val txt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = PRETO; textAlign = android.graphics.Paint.Align.CENTER; textSize = dpf(40); typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); setShadowLayer(dpf(8), 0f, 0f, 0xCCFFFFFF.toInt()) }
             val r = android.graphics.RectF()
-            init { setLayerType(LAYER_TYPE_SOFTWARE, null) }
+            init { setLayerType(LAYER_TYPE_SOFTWARE, null); isFocusable = true; isFocusableInTouchMode = true; defaultFocusHighlightEnabledCompat() }
             override fun onDraw(c: android.graphics.Canvas) {
                 val m = dpf(14); r.set(m, m, width - m, height - m)
                 c.drawArc(r, 0f, 360f, false, sombra)
@@ -419,8 +419,11 @@ class MainActivity : Activity() {
         }
         d.setOnDismissListener { handler.removeCallbacks(fecha) }
         d.show()
+        anel.requestFocus()
         tempo()
     }
+
+    private fun View.defaultFocusHighlightEnabledCompat() { if (Build.VERSION.SDK_INT >= 26) defaultFocusHighlightEnabled = false }
 
     private fun trocarModo() {
         prefs.escuro = !prefs.escuro
