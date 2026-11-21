@@ -31,7 +31,7 @@ tecla BACK
 adb shell am start -n com.geanalves.tvhome/.MainActivity -e abrir descanso; sleep 20; foto 05e-descanso
 tecla BACK
 # 3d) Modo escuro (céu azul com estrelas)
-adb shell am start -n com.geanalves.tvhome/.MainActivity -e abrir modo; sleep 15; foto 05f-escuro
+adb shell am start -n com.geanalves.tvhome/.MainActivity -e abrir modo; sleep 4; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do foto 05f-escuro-$i; sleep 0.4; done
 tecla DPAD_DOWN; sleep 2; foto 05g-escuro-foco
 adb shell am start -n com.geanalves.tvhome/.MainActivity -e abrir modo; sleep 8
 # 3) Volume (o número na tela)
