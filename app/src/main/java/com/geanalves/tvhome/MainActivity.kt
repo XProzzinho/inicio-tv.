@@ -369,34 +369,53 @@ class MainActivity : Activity() {
         blocos.first().requestFocus()
     }
 
-    /** Brilho na lateral direita: só o ANEL e o número no meio, sem caixa (fundo transparente).
+    /** Brilho na lateral direita: quadradinho de VIDRO com o título, o anel, o sol e o número (sem botões).
      *  ▲ ▶ aumentam, ▼ ◀ abaixam (de 10 em 10); OK ou Voltar fecha; some sozinho. */
     private fun abrirBrilho() {
         val d = android.app.Dialog(this)
         d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
         var nivel = Brilho.atual(this)
         val anel = object : View(this) {
-            val sombra = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { style = android.graphics.Paint.Style.STROKE; color = 0x33000000; strokeWidth = dpf(20) }
-            val fundo = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { style = android.graphics.Paint.Style.STROKE; color = 0x99FFFFFF.toInt(); strokeWidth = dpf(14) }
-            val cheio = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { style = android.graphics.Paint.Style.STROKE; color = PRETO; strokeWidth = dpf(14); strokeCap = android.graphics.Paint.Cap.ROUND; setShadowLayer(dpf(6), 0f, dpf(2), 0x55000000) }
-            val txt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = PRETO; textAlign = android.graphics.Paint.Align.CENTER; textSize = dpf(40); typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); setShadowLayer(dpf(8), 0f, 0f, 0xCCFFFFFF.toInt()) }
+            val fundo = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { style = android.graphics.Paint.Style.STROKE; color = 0x40000000; strokeWidth = dpf(14) }
+            val sol = this@MainActivity.getDrawable(R.drawable.ic_brilho)?.mutate()?.apply { setTint(PRETO) }
+            val cheio = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { style = android.graphics.Paint.Style.STROKE; color = PRETO; strokeWidth = dpf(14); strokeCap = android.graphics.Paint.Cap.ROUND }
+            val txt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = PRETO; textAlign = android.graphics.Paint.Align.CENTER; textSize = dpf(34); typeface = Typeface.create("sans-serif-medium", Typeface.BOLD) }
             val r = android.graphics.RectF()
             init { setLayerType(LAYER_TYPE_SOFTWARE, null); isFocusable = true; isFocusableInTouchMode = true; defaultFocusHighlightEnabledCompat() }
             override fun onDraw(c: android.graphics.Canvas) {
                 val m = dpf(14); r.set(m, m, width - m, height - m)
-                c.drawArc(r, 0f, 360f, false, sombra)
                 c.drawArc(r, 0f, 360f, false, fundo)
                 c.drawArc(r, -90f, 360f * nivel / 100f, false, cheio)
-                c.drawText("$nivel%", width / 2f, height / 2f - (txt.descent() + txt.ascent()) / 2f, txt)
+                val sz = dp(26); val cx = width / 2; val sy = (height * 0.25f).toInt()
+                sol?.setBounds(cx - sz / 2, sy, cx + sz / 2, sy + sz); sol?.draw(c)
+                c.drawText("$nivel%", width / 2f, height * 0.68f, txt)
             }
         }
-        d.setContentView(anel, android.view.ViewGroup.LayoutParams(dp(180), dp(180)))
+        // quadradinho de vidro: branco translúcido, borda clara e sombra (no Android 12+ ainda desfoca o fundo)
+        val vidro = GradientDrawable().apply { cornerRadius = dpf(30); setColor(0x8CFFFFFF.toInt()); setStroke(dp(2), 0xCCFFFFFF.toInt()) }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            background = vidro
+            setPadding(dp(20), dp(16), dp(20), dp(20))
+            elevation = dpf(20)
+        }
+        box.addView(TextView(this).apply {
+            text = "Brilho"
+            gravity = Gravity.CENTER
+            textSize = 20f
+            setTextColor(PRETO)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+        }, LinearLayout.LayoutParams(MATCH, WRAP))
+        box.addView(anel, LinearLayout.LayoutParams(dp(170), dp(170)).apply { topMargin = dp(8) })
+        d.setContentView(box)
         d.window?.apply {
             setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
             setDimAmount(0f)
             setGravity(Gravity.END or Gravity.CENTER_VERTICAL)
-            attributes = attributes.apply { x = dp(50) }
-            setLayout(dp(180), dp(180))
+            attributes = attributes.apply { x = dp(40) }
+            setLayout(dp(220), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
+            if (Build.VERSION.SDK_INT >= 31) { addFlags(android.view.WindowManager.LayoutParams.FLAG_BLUR_BEHIND); attributes = attributes.apply { blurBehindRadius = dp(28) } }
         }
         val fecha = Runnable { if (d.isShowing) d.dismiss() }
         fun tempo() { handler.removeCallbacks(fecha); handler.postDelayed(fecha, 4000) }
