@@ -386,18 +386,18 @@ class MainActivity : Activity() {
                 val m = dpf(14); r.set(m, m, width - m, height - m)
                 c.drawArc(r, 0f, 360f, false, fundo)
                 c.drawArc(r, -90f, 360f * nivel / 100f, false, cheio)
-                val sz = dp(26); val cx = width / 2; val sy = (height * 0.25f).toInt()
+                val sz = dp(24); val cx = width / 2; val sy = (height * 0.2f).toInt()
                 sol?.setBounds(cx - sz / 2, sy, cx + sz / 2, sy + sz); sol?.draw(c)
-                c.drawText("$nivel%", width / 2f, height * 0.68f, txt)
+                c.drawText("$nivel%", width / 2f, height * 0.7f, txt)
             }
         }
         // quadradinho de vidro: branco translúcido, borda clara e sombra (no Android 12+ ainda desfoca o fundo)
-        val vidro = GradientDrawable().apply { cornerRadius = dpf(30); setColor(0x8CFFFFFF.toInt()); setStroke(dp(2), 0xCCFFFFFF.toInt()) }
+        val vidro = GradientDrawable().apply { cornerRadius = dpf(30); setColor(0xB8FFFFFF.toInt()); setStroke(dp(2), 0xE6FFFFFF.toInt()) }
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             background = vidro
-            setPadding(dp(20), dp(16), dp(20), dp(20))
+            setPadding(dp(20), dp(16), dp(20), dp(26))
             elevation = dpf(20)
         }
         box.addView(TextView(this).apply {
