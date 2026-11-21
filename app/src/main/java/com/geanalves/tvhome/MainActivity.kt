@@ -1541,7 +1541,25 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER
         }
         var baixando = false
+        var pronto: java.io.File? = null
+        // já vai baixando sozinho por trás, pra na hora de atualizar ser na hora
+        var querInstalar = false
+        var rodando = false
+        fun comecar() {
+            rodando = true
+            Atualizacao.baixar(this, v, progresso = { info.text = if (baixando) "Baixando… $it%" else "${v.nome} está disponível.\nPreparando… $it%" }) { f ->
+                rodando = false
+                if (f == null) { info.text = "Não consegui baixar. Confira a internet e tente de novo."; baixando = false; querInstalar = false; return@baixar }
+                pronto = f
+                if (querInstalar && d.isShowing) { d.dismiss(); if (!Atualizacao.instalar(this)) toast("Não consegui abrir o instalador") }
+                else info.text = "${v.nome} já está baixada.\nAperte Atualizar pra instalar."
+            }
+        }
+        comecar()
         val atualizar = pill("Atualizar") {
+            if (pronto != null && !(android.os.Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls())) {
+                d.dismiss(); if (!Atualizacao.instalar(this)) toast("Não consegui abrir o instalador"); return@pill
+            }
             if (baixando) return@pill
             if (android.os.Build.VERSION.SDK_INT >= 26 && !packageManager.canRequestPackageInstalls()) {
                 // Primeira vez: a TV precisa deixar o Início TV instalar atualizações
@@ -1556,17 +1574,10 @@ class MainActivity : Activity() {
                 }
                 return@pill
             }
-            baixando = true
-            info.text = "Baixando… 0%"
-            Atualizacao.baixar(this, v, progresso = { info.text = "Baixando… $it%" }) { f ->
-                baixando = false
-                if (f == null) {
-                    info.text = "Não consegui baixar. Confira a internet e tente de novo."
-                } else {
-                    d.dismiss()
-                    if (!Atualizacao.instalar(this)) toast("Não consegui abrir o instalador")
-                }
-            }
+            if (pronto != null) { d.dismiss(); if (!Atualizacao.instalar(this)) toast("Não consegui abrir o instalador"); return@pill }
+            baixando = true; querInstalar = true
+            info.text = "Baixando…"
+            if (!rodando) comecar()
         }
         val depois = pill("Depois") {
             Atualizacao.adiar(this, v)
@@ -1952,6 +1963,8 @@ class MainActivity : Activity() {
         f.addView(saverImg, FrameLayout.LayoutParams(MATCH, MATCH))
         // véu escuro por igual (a hora fica no meio da tela)
         f.addView(View(this).apply { setBackgroundColor(0x66000000) }, FrameLayout.LayoutParams(MATCH, MATCH))
+        // céu animado também no descanso: estrelas, constelações, poeirinha e estrela cadente (sem lua e aurora)
+        f.addView(Estrelas(this, claro = false, descanso = true), FrameLayout.LayoutParams(MATCH, MATCH))
         f.addView(
             View(this).apply {
                 background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x00000000, 0x00000000, 0x99000000.toInt()))
@@ -2392,7 +2405,7 @@ class MainActivity : Activity() {
 /** Fundo do modo escuro animado: céu que muda de cor com a hora, aurora, lua na fase de verdade,
  *  estrelas piscando (as maiores com brilho em cruz), constelações que aparecem e somem,
  *  poeirinha de luz subindo e ESTRELA CADENTE. Os brilhos fixos são desenhados uma vez só. */
-class Estrelas(ctx: Context, private val claro: Boolean = false) : View(ctx) {
+class Estrelas(ctx: Context, private val claro: Boolean = false, private val descanso: Boolean = false) : View(ctx) {
     private val rnd = java.util.Random(7)
     private val pts = Array(80) { floatArrayOf(rnd.nextFloat(), rnd.nextFloat() * 0.75f, 0.6f + rnd.nextFloat() * 1.8f, rnd.nextFloat() * 6.28f, 0.4f + rnd.nextFloat() * 0.8f) }
     private val po = Array(26) { floatArrayOf(rnd.nextFloat(), rnd.nextFloat(), 1.2f + rnd.nextFloat() * 2.2f, 0.012f + rnd.nextFloat() * 0.025f, rnd.nextFloat() * 6.28f) }
@@ -2437,11 +2450,14 @@ class Estrelas(ctx: Context, private val claro: Boolean = false) : View(ctx) {
         val w = width.toFloat(); val h = height.toFloat(); if (w <= 0f) return
         val agora = System.currentTimeMillis(); val dt = ((agora - ultimo) / 1000f).coerceIn(0f, 0.1f); ultimo = agora
         if (java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) != fundoHora) montaFundo(width, height)
-        fundo?.let { dst.set(0, 0, width, height); c.drawBitmap(it, null, dst, null) }
+        // ECONOMIA AUTOMÁTICA: se a TV estiver lenta (menos de ~14 quadros/s), desenha menos coisa
+        media = media * 0.95f + dt * 0.05f
+        if (!leve && media > 0.07f) leve = true else if (leve && media < 0.045f) leve = false
+        if (!descanso) fundo?.let { dst.set(0, 0, width, height); c.drawBitmap(it, null, dst, null) }
         val d = resources.displayMetrics.density
         val t = (agora - t0) / 1000f
 
-        // AURORA: duas faixas de luz (verde e roxa) ondulando devagar lá em cima
+        if (!descanso && !leve) // AURORA: duas faixas de luz (verde e roxa) ondulando devagar lá em cima
         for ((k, cor) in (if (claro) listOf(0x2496D8FF, 0x20FFA0C8) else listOf(0x2E3DFFB0, 0x26B06CFF)).withIndex()) {
             caminho.reset()
             val base = h * (0.03f + k * 0.05f); val alt = h * 0.16f
@@ -2455,7 +2471,7 @@ class Estrelas(ctx: Context, private val claro: Boolean = false) : View(ctx) {
         }
 
         // LUA na fase de verdade, perto da hora
-        run {
+        if (!descanso) run {
             val r = 18f * d; val lx = w * 0.60f; val ly = h * 0.255f; val f = faseLua()
             if (f > 0.03f && f < 0.97f) {
                 if (!claro) { p.color = 0x16FFF2CC; c.drawCircle(lx, ly, r * 1.8f, p); p.color = 0x0AFFF2CC; c.drawCircle(lx, ly, r * 2.6f, p) } else { p.color = 0x14000000; c.drawCircle(lx, ly + d, r * 1.05f, p) }
@@ -2468,8 +2484,9 @@ class Estrelas(ctx: Context, private val claro: Boolean = false) : View(ctx) {
             }
         }
 
-        // estrelas piscando
-        for (s in pts) {
+        // estrelas piscando (no modo leve, só metade)
+        for ((ix, s) in pts.withIndex()) {
+            if (leve && ix % 2 == 1) continue
             val a = 0.3f + 0.7f * (0.5f + 0.5f * kotlin.math.sin(t * s[4] + s[3]))
             val x = s[0] * w; val y = s[1] * h; val r = s[2] * d * 0.9f
             p.color = if (claro) Color.argb((a * 120).toInt(), 120, 140, 185) else Color.argb((a * 210).toInt(), 255, 244, 214)
@@ -2496,7 +2513,7 @@ class Estrelas(ctx: Context, private val claro: Boolean = false) : View(ctx) {
         }
 
         // poeirinha de luz subindo
-        for (q in po) {
+        if (!leve) for (q in po) {
             q[1] -= q[3] * dt; if (q[1] < -0.05f) { q[1] = 1.05f; q[0] = rnd.nextFloat() }
             val x = (q[0] + 0.015f * kotlin.math.sin(t * 0.6f + q[4])) * w; val y = q[1] * h; val r = q[2] * d
             val a = (0.5f + 0.5f * kotlin.math.sin(t * 1.3f + q[4])) * kotlin.math.min(1f, (1.05f - q[1]) * 4f)
@@ -2521,8 +2538,10 @@ class Estrelas(ctx: Context, private val claro: Boolean = false) : View(ctx) {
             p.color = if (claro) Color.argb((forca * 60).toInt(), 140, 170, 230) else Color.argb((forca * 90).toInt(), 190, 215, 255); c.drawCircle(hx, hy, d * 12f, p)
             p.color = if (claro) Color.argb((forca * 230).toInt(), 100, 130, 200) else Color.argb((forca * 255).toInt(), 255, 255, 255); c.drawCircle(hx, hy, d * 3f, p)
         }
-        postInvalidateDelayed(40)
+        postInvalidateDelayed(if (leve) 80 else 40)
     }
+    private var media = 0.04f
+    private var leve = false
 }
 
 /** Efeitos de datas e do tempo, nos dois modos: NEVE no Natal (20 a 26/dez), FOGOS no Ano Novo (31/dez e 1º/jan),
