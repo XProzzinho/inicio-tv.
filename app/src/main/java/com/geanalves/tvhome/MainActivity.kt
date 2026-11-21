@@ -2340,16 +2340,23 @@ class MainActivity : Activity() {
     }
 }
 
-/** Fundo do modo escuro: brilhos azulados (desenhados uma vez só) e estrelinhas que piscam devagar. */
+/** Fundo do modo escuro animado: estrelas piscando (as maiores com brilho em cruz), poeirinha de luz
+ *  subindo devagar e, de vez em quando, uma ESTRELA CADENTE riscando o céu. Os brilhos azuis são desenhados uma vez só. */
 class Estrelas(ctx: Context) : View(ctx) {
     private val rnd = java.util.Random(7)
+    // estrelas fixas: x, y, tamanho, fase, velocidade do pisca
     private val pts = Array(80) { floatArrayOf(rnd.nextFloat(), rnd.nextFloat() * 0.75f, 0.6f + rnd.nextFloat() * 1.8f, rnd.nextFloat() * 6.28f, 0.4f + rnd.nextFloat() * 0.8f) }
+    // poeirinha de luz: x, y, tamanho, velocidade de subida, balanço
+    private val po = Array(26) { floatArrayOf(rnd.nextFloat(), rnd.nextFloat(), 1.2f + rnd.nextFloat() * 2.2f, 0.012f + rnd.nextFloat() * 0.025f, rnd.nextFloat() * 6.28f) }
     private val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    private val traco = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { strokeCap = android.graphics.Paint.Cap.ROUND }
     private var fundo: android.graphics.Bitmap? = null
     private val t0 = System.currentTimeMillis()
+    private var ultimo = t0
+    // estrela cadente: começo (x,y), direção, quando nasceu
+    private var cadT = -100f; private var cadX = 0f; private var cadY = 0f; private var proxCad = 3f
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
         if (w <= 0 || h <= 0) return
-        // brilhos em meia resolução (mais leve) e esticados na hora de desenhar
         val b = android.graphics.Bitmap.createBitmap(w / 2, h / 2, android.graphics.Bitmap.Config.ARGB_8888)
         val c = android.graphics.Canvas(b); val g = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
         fun glow(x: Float, y: Float, r: Float, cor: Int) { g.shader = android.graphics.RadialGradient(x, y, r, cor, 0, android.graphics.Shader.TileMode.CLAMP); c.drawCircle(x, y, r, g) }
@@ -2360,14 +2367,43 @@ class Estrelas(ctx: Context) : View(ctx) {
     private val dst = android.graphics.Rect()
     override fun onDraw(c: android.graphics.Canvas) {
         val w = width.toFloat(); val h = height.toFloat(); if (w <= 0f) return
+        val agora = System.currentTimeMillis(); val dt = ((agora - ultimo) / 1000f).coerceIn(0f, 0.1f); ultimo = agora
         fundo?.let { dst.set(0, 0, width, height); c.drawBitmap(it, null, dst, null) }
         val d = resources.displayMetrics.density
-        val t = (System.currentTimeMillis() - t0) / 1000f
+        val t = (agora - t0) / 1000f
+        // estrelas piscando
         for (s in pts) {
-            val a = 0.35f + 0.65f * (0.5f + 0.5f * kotlin.math.sin(t * s[4] + s[3]))
-            p.color = Color.argb((a * 200).toInt(), 255, 244, 214)
-            c.drawCircle(s[0] * w, s[1] * h, s[2] * d * 0.9f, p)
+            val a = 0.3f + 0.7f * (0.5f + 0.5f * kotlin.math.sin(t * s[4] + s[3]))
+            val x = s[0] * w; val y = s[1] * h; val r = s[2] * d * 0.9f
+            p.color = Color.argb((a * 210).toInt(), 255, 244, 214)
+            c.drawCircle(x, y, r, p)
+            if (s[2] > 2.1f && a > 0.75f) { // brilho em cruz nas maiores
+                traco.strokeWidth = d * 0.8f; traco.color = Color.argb(((a - 0.75f) * 4 * 160).toInt(), 255, 248, 225)
+                val l = r * 5f; c.drawLine(x - l, y, x + l, y, traco); c.drawLine(x, y - l, x, y + l, traco)
+            }
         }
-        postInvalidateDelayed(200)
+        // poeirinha de luz subindo
+        for (q in po) {
+            q[1] -= q[3] * dt; if (q[1] < -0.05f) { q[1] = 1.05f; q[0] = rnd.nextFloat() }
+            val x = (q[0] + 0.015f * kotlin.math.sin(t * 0.6f + q[4])) * w; val y = q[1] * h; val r = q[2] * d
+            val a = (0.5f + 0.5f * kotlin.math.sin(t * 1.3f + q[4])) * kotlin.math.min(1f, (1.05f - q[1]) * 4f)
+            p.color = Color.argb((a * 40).toInt(), 140, 190, 255); c.drawCircle(x, y, r * 3.2f, p)
+            p.color = Color.argb((a * 200).toInt(), 225, 238, 255); c.drawCircle(x, y, r, p)
+        }
+        // estrela cadente de tempos em tempos
+        if (t > proxCad && t - cadT > 1.2f) { cadT = t; cadX = w * (0.25f + rnd.nextFloat() * 0.6f); cadY = h * (0.04f + rnd.nextFloat() * 0.22f); proxCad = t + 6f + rnd.nextFloat() * 6f }
+        val u = (t - cadT) / 1.1f
+        if (u in 0f..1f) {
+            val dx = -w * 0.32f; val dy = h * 0.22f
+            val hx = cadX + dx * u; val hy = cadY + dy * u
+            val cauda = 0.22f
+            traco.shader = android.graphics.LinearGradient(hx, hy, hx - dx * cauda, hy - dy * cauda, Color.argb(((1 - u) * 255).toInt(), 255, 250, 235), 0x00FFFFFF, android.graphics.Shader.TileMode.CLAMP)
+            traco.strokeWidth = d * 2.2f; traco.color = Color.WHITE
+            c.drawLine(hx, hy, hx - dx * cauda, hy - dy * cauda, traco)
+            traco.shader = null
+            p.color = Color.argb(((1 - u) * 255).toInt(), 255, 255, 255); c.drawCircle(hx, hy, d * 2.2f, p)
+            p.color = Color.argb(((1 - u) * 70).toInt(), 180, 210, 255); c.drawCircle(hx, hy, d * 7f, p)
+        }
+        postInvalidateDelayed(40)
     }
 }
