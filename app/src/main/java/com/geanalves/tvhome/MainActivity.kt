@@ -2354,7 +2354,7 @@ class Estrelas(ctx: Context) : View(ctx) {
     private val t0 = System.currentTimeMillis()
     private var ultimo = t0
     // estrela cadente: começo (x,y), direção, quando nasceu
-    private var cadT = -100f; private var cadX = 0f; private var cadY = 0f; private var proxCad = 3f
+    private var cadT = -100f; private var cadX = 0f; private var cadY = 0f; private var proxCad = 1.2f
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
         if (w <= 0 || h <= 0) return
         val b = android.graphics.Bitmap.createBitmap(w / 2, h / 2, android.graphics.Bitmap.Config.ARGB_8888)
@@ -2390,19 +2390,22 @@ class Estrelas(ctx: Context) : View(ctx) {
             p.color = Color.argb((a * 40).toInt(), 140, 190, 255); c.drawCircle(x, y, r * 3.2f, p)
             p.color = Color.argb((a * 200).toInt(), 225, 238, 255); c.drawCircle(x, y, r, p)
         }
-        // estrela cadente de tempos em tempos
-        if (t > proxCad && t - cadT > 1.2f) { cadT = t; cadX = w * (0.25f + rnd.nextFloat() * 0.6f); cadY = h * (0.04f + rnd.nextFloat() * 0.22f); proxCad = t + 6f + rnd.nextFloat() * 6f }
-        val u = (t - cadT) / 1.1f
+        // ESTRELA CADENTE: bem visível, rastro comprido, a cada 3 a 6 segundos (às vezes duas seguidas)
+        if (t > proxCad) { cadT = t; cadX = w * (0.35f + rnd.nextFloat() * 0.6f); cadY = h * (0.02f + rnd.nextFloat() * 0.25f); proxCad = t + if (rnd.nextFloat() < 0.25f) 1.6f else 3f + rnd.nextFloat() * 3f }
+        val u = (t - cadT) / 1.5f
         if (u in 0f..1f) {
-            val dx = -w * 0.32f; val dy = h * 0.22f
+            val dx = -w * 0.48f; val dy = h * 0.34f
             val hx = cadX + dx * u; val hy = cadY + dy * u
-            val cauda = 0.22f
-            traco.shader = android.graphics.LinearGradient(hx, hy, hx - dx * cauda, hy - dy * cauda, Color.argb(((1 - u) * 255).toInt(), 255, 250, 235), 0x00FFFFFF, android.graphics.Shader.TileMode.CLAMP)
-            traco.strokeWidth = d * 2.2f; traco.color = Color.WHITE
-            c.drawLine(hx, hy, hx - dx * cauda, hy - dy * cauda, traco)
+            val forca = kotlin.math.sin(Math.PI.toFloat() * u)
+            val cauda = 0.42f * (0.4f + 0.6f * forca)
+            val tx = hx - dx * cauda; val ty = hy - dy * cauda
+            traco.shader = android.graphics.LinearGradient(hx, hy, tx, ty, Color.argb((forca * 255).toInt(), 255, 252, 240), 0x00FFFFFF, android.graphics.Shader.TileMode.CLAMP)
+            traco.color = Color.WHITE
+            traco.strokeWidth = d * 6f; traco.alpha = (forca * 60).toInt(); c.drawLine(hx, hy, tx, ty, traco)  // brilho largo
+            traco.strokeWidth = d * 2.6f; traco.alpha = 255; c.drawLine(hx, hy, tx, ty, traco)                   // traço
             traco.shader = null
-            p.color = Color.argb(((1 - u) * 255).toInt(), 255, 255, 255); c.drawCircle(hx, hy, d * 2.2f, p)
-            p.color = Color.argb(((1 - u) * 70).toInt(), 180, 210, 255); c.drawCircle(hx, hy, d * 7f, p)
+            p.color = Color.argb((forca * 90).toInt(), 190, 215, 255); c.drawCircle(hx, hy, d * 12f, p)
+            p.color = Color.argb((forca * 255).toInt(), 255, 255, 255); c.drawCircle(hx, hy, d * 3f, p)
         }
         postInvalidateDelayed(40)
     }
