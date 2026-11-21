@@ -30,6 +30,8 @@ tecla BACK
 # 3c) Tela de descanso (hora no centro)
 adb shell am start -n com.geanalves.tvhome/.MainActivity -e abrir descanso; sleep 20; foto 05e-descanso
 tecla BACK
+# 3c2) Modo claro com o céu animado e a ilha de vidro
+tecla HOME; sleep 6; for i in 1 2 3; do foto 05e2-claro-$i; sleep 1; done
 # 3d) Modo escuro (céu azul com estrelas)
 adb shell am start -n com.geanalves.tvhome/.MainActivity -e abrir modo; sleep 4; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do foto 05f-escuro-$i; sleep 0.4; done
 tecla DPAD_DOWN; sleep 2; foto 05g-escuro-foco

@@ -563,7 +563,7 @@ class MainActivity : Activity() {
             FrameLayout.LayoutParams(MATCH, MATCH),
         )
         // modo escuro: céu azul-noite com estrelinhas piscando e brilhos suaves
-        if (Cores.escuro) root.addView(Estrelas(this), FrameLayout.LayoutParams(MATCH, MATCH))
+        root.addView(Estrelas(this, claro = !Cores.escuro), FrameLayout.LayoutParams(MATCH, MATCH))
         // datas especiais (Natal, Ano Novo, Namorados) e chuva de verdade em Pirapora
         efeitos = Efeitos(this)
         root.addView(efeitos, FrameLayout.LayoutParams(MATCH, MATCH))
@@ -784,11 +784,11 @@ class MainActivity : Activity() {
         // --- barra de apps
         // Faixa branca lisa de ponta a ponta, sem cantos, com uma linha fina em cima (barra 1)
         // No modo escuro: ILHA DE VIDRO flutuante (arredondada, transparente, borda clara e reflexo em cima)
-        val ilha = Cores.escuro
+        val ilha = true
         val dock = FrameLayout(this).apply {
             background = if (ilha) android.graphics.drawable.LayerDrawable(
                 arrayOf(
-                    GradientDrawable().apply { cornerRadius = dpf(30); setColor(0x29FFFFFF); setStroke(dp(1) + dp(1) / 2, 0x6BFFFFFF) },
+                    GradientDrawable().apply { cornerRadius = dpf(30); setColor(if (Cores.escuro) 0x29FFFFFF else 0x8CFFFFFF.toInt()); setStroke(dp(1) + dp(1) / 2, if (Cores.escuro) 0x6BFFFFFF else 0x1F000000) },
                     GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x2EFFFFFF, 0x00FFFFFF, 0x00FFFFFF)).apply { cornerRadius = dpf(30) },
                 ),
             ) else android.graphics.drawable.LayerDrawable(
@@ -797,7 +797,7 @@ class MainActivity : Activity() {
                     android.graphics.drawable.ColorDrawable(Cores.barra),
                 ),
             ).apply { setLayerInset(1, 0, dp(1), 0, 0) }
-            elevation = if (ilha) 0f else dpf(4)
+            elevation = if (Cores.escuro) 0f else dpf(3)
             setPadding(if (ilha) dp(16) else dp(48), dp(12), if (ilha) dp(16) else dp(48), dp(12))
             clipChildren = false
             clipToPadding = false
@@ -2392,7 +2392,7 @@ class MainActivity : Activity() {
 /** Fundo do modo escuro animado: céu que muda de cor com a hora, aurora, lua na fase de verdade,
  *  estrelas piscando (as maiores com brilho em cruz), constelações que aparecem e somem,
  *  poeirinha de luz subindo e ESTRELA CADENTE. Os brilhos fixos são desenhados uma vez só. */
-class Estrelas(ctx: Context) : View(ctx) {
+class Estrelas(ctx: Context, private val claro: Boolean = false) : View(ctx) {
     private val rnd = java.util.Random(7)
     private val pts = Array(80) { floatArrayOf(rnd.nextFloat(), rnd.nextFloat() * 0.75f, 0.6f + rnd.nextFloat() * 1.8f, rnd.nextFloat() * 6.28f, 0.4f + rnd.nextFloat() * 0.8f) }
     private val po = Array(26) { floatArrayOf(rnd.nextFloat(), rnd.nextFloat(), 1.2f + rnd.nextFloat() * 2.2f, 0.012f + rnd.nextFloat() * 0.025f, rnd.nextFloat() * 6.28f) }
@@ -2416,10 +2416,11 @@ class Estrelas(ctx: Context) : View(ctx) {
         val c = android.graphics.Canvas(b); val g = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
         val W = b.width.toFloat(); val H = b.height.toFloat()
         // céu muda com a hora: nascer do sol alaranjado, fim da tarde roxo, noite azul
-        val tinta = when (hora) { in 5..6 -> 0x55FF8A3D; in 17..18 -> 0x55B04AD8; 19 -> 0x33703AC8; else -> 0 }
+        val tinta = if (claro) when (hora) { in 5..7 -> 0x30FFB070; in 16..18 -> 0x30E0A0FF; else -> 0 } else when (hora) { in 5..6 -> 0x55FF8A3D; in 17..18 -> 0x55B04AD8; 19 -> 0x33703AC8; else -> 0 }
         if (tinta != 0) { g.shader = android.graphics.LinearGradient(0f, H, 0f, H * 0.2f, tinta, 0, android.graphics.Shader.TileMode.CLAMP); c.drawRect(0f, 0f, W, H, g) }
         fun glow(x: Float, y: Float, r: Float, cor: Int) { g.shader = android.graphics.RadialGradient(x, y, r, cor, 0, android.graphics.Shader.TileMode.CLAMP); c.drawCircle(x, y, r, g) }
-        glow(W * 0.42f, H * 0.48f, W * 0.38f, 0x332E5BFF); glow(W * 0.86f, H * 0.22f, W * 0.22f, 0x2240A0FF); glow(W * 0.10f, H * 0.10f, W * 0.18f, 0x1A9A6BFF)
+        if (claro) { glow(W * 0.42f, H * 0.48f, W * 0.38f, 0x228AB4FF); glow(W * 0.86f, H * 0.22f, W * 0.22f, 0x22FFC48A); glow(W * 0.10f, H * 0.10f, W * 0.18f, 0x1CC8A0FF) }
+        else { glow(W * 0.42f, H * 0.48f, W * 0.38f, 0x332E5BFF); glow(W * 0.86f, H * 0.22f, W * 0.22f, 0x2240A0FF); glow(W * 0.10f, H * 0.10f, W * 0.18f, 0x1A9A6BFF) }
         fundo = b; fundoHora = hora
     }
     override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) = montaFundo(w, h)
@@ -2441,7 +2442,7 @@ class Estrelas(ctx: Context) : View(ctx) {
         val t = (agora - t0) / 1000f
 
         // AURORA: duas faixas de luz (verde e roxa) ondulando devagar lá em cima
-        for ((k, cor) in listOf(0x2E3DFFB0, 0x26B06CFF).withIndex()) {
+        for ((k, cor) in (if (claro) listOf(0x2496D8FF, 0x20FFA0C8) else listOf(0x2E3DFFB0, 0x26B06CFF)).withIndex()) {
             caminho.reset()
             val base = h * (0.03f + k * 0.05f); val alt = h * 0.16f
             var x = 0f; caminho.moveTo(0f, base)
@@ -2457,9 +2458,9 @@ class Estrelas(ctx: Context) : View(ctx) {
         run {
             val r = 18f * d; val lx = w * 0.60f; val ly = h * 0.255f; val f = faseLua()
             if (f > 0.03f && f < 0.97f) {
-                p.color = 0x16FFF2CC; c.drawCircle(lx, ly, r * 1.8f, p); p.color = 0x0AFFF2CC; c.drawCircle(lx, ly, r * 2.6f, p)
+                if (!claro) { p.color = 0x16FFF2CC; c.drawCircle(lx, ly, r * 1.8f, p); p.color = 0x0AFFF2CC; c.drawCircle(lx, ly, r * 2.6f, p) } else { p.color = 0x14000000; c.drawCircle(lx, ly + d, r * 1.05f, p) }
                 val camada = c.saveLayer(lx - r * 2, ly - r * 2, lx + r * 2, ly + r * 2, null)
-                p.color = 0xFFFFF4D6.toInt(); c.drawCircle(lx, ly, r, p)
+                p.color = if (claro) 0xFFDCE3EE.toInt() else 0xFFFFF4D6.toInt(); c.drawCircle(lx, ly, r, p)
                 val k = f * 2f // 0..2
                 val desloca = if (k < 1f) -2f * r * k else 2f * r * (2f - k) // crescente: sombra à esquerda; minguante: à direita
                 if (kotlin.math.abs(desloca) < 2f * r) c.drawCircle(lx + desloca, ly, r * 1.02f, corta)
@@ -2471,10 +2472,10 @@ class Estrelas(ctx: Context) : View(ctx) {
         for (s in pts) {
             val a = 0.3f + 0.7f * (0.5f + 0.5f * kotlin.math.sin(t * s[4] + s[3]))
             val x = s[0] * w; val y = s[1] * h; val r = s[2] * d * 0.9f
-            p.color = Color.argb((a * 210).toInt(), 255, 244, 214)
+            p.color = if (claro) Color.argb((a * 120).toInt(), 120, 140, 185) else Color.argb((a * 210).toInt(), 255, 244, 214)
             c.drawCircle(x, y, r, p)
             if (s[2] > 2.1f && a > 0.75f) {
-                traco.strokeWidth = d * 0.8f; traco.color = Color.argb(((a - 0.75f) * 4 * 160).toInt(), 255, 248, 225)
+                traco.strokeWidth = d * 0.8f; traco.color = if (claro) Color.argb(((a - 0.75f) * 4 * 110).toInt(), 120, 140, 190) else Color.argb(((a - 0.75f) * 4 * 160).toInt(), 255, 248, 225)
                 val l = r * 5f; c.drawLine(x - l, y, x + l, y, traco); c.drawLine(x, y - l, x, y + l, traco)
             }
         }
@@ -2488,10 +2489,10 @@ class Estrelas(ctx: Context) : View(ctx) {
         val uc = (t - conT) / 5f
         if (uc in 0f..1f && con.size > 1) {
             val al = kotlin.math.sin(Math.PI.toFloat() * uc)
-            traco.strokeWidth = d * 1.1f; traco.color = Color.argb((al * 120).toInt(), 200, 220, 255)
+            traco.strokeWidth = d * 1.1f; traco.color = if (claro) Color.argb((al * 90).toInt(), 110, 130, 180) else Color.argb((al * 120).toInt(), 200, 220, 255)
             val n = kotlin.math.min(con.size - 1, (uc * 3f * (con.size - 1)).toInt() + 1)
             for (q in 0 until n) { val A = pts[con[q]]; val B = pts[con[q + 1]]; c.drawLine(A[0] * w, A[1] * h, B[0] * w, B[1] * h, traco) }
-            for (q in con) { p.color = Color.argb((al * 255).toInt(), 230, 240, 255); c.drawCircle(pts[q][0] * w, pts[q][1] * h, 2.6f * d, p) }
+            for (q in con) { p.color = if (claro) Color.argb((al * 170).toInt(), 110, 130, 180) else Color.argb((al * 255).toInt(), 230, 240, 255); c.drawCircle(pts[q][0] * w, pts[q][1] * h, 2.6f * d, p) }
         }
 
         // poeirinha de luz subindo
@@ -2499,8 +2500,8 @@ class Estrelas(ctx: Context) : View(ctx) {
             q[1] -= q[3] * dt; if (q[1] < -0.05f) { q[1] = 1.05f; q[0] = rnd.nextFloat() }
             val x = (q[0] + 0.015f * kotlin.math.sin(t * 0.6f + q[4])) * w; val y = q[1] * h; val r = q[2] * d
             val a = (0.5f + 0.5f * kotlin.math.sin(t * 1.3f + q[4])) * kotlin.math.min(1f, (1.05f - q[1]) * 4f)
-            p.color = Color.argb((a * 40).toInt(), 140, 190, 255); c.drawCircle(x, y, r * 3.2f, p)
-            p.color = Color.argb((a * 200).toInt(), 225, 238, 255); c.drawCircle(x, y, r, p)
+            if (claro) { p.color = Color.argb((a * 45).toInt(), 140, 180, 255); c.drawCircle(x, y, r * 3.2f, p); p.color = Color.argb((a * 120).toInt(), 120, 160, 230); c.drawCircle(x, y, r, p) }
+            else { p.color = Color.argb((a * 40).toInt(), 140, 190, 255); c.drawCircle(x, y, r * 3.2f, p); p.color = Color.argb((a * 200).toInt(), 225, 238, 255); c.drawCircle(x, y, r, p) }
         }
 
         // ESTRELA CADENTE
@@ -2512,13 +2513,13 @@ class Estrelas(ctx: Context) : View(ctx) {
             val forca = kotlin.math.sin(Math.PI.toFloat() * u)
             val cauda = 0.42f * (0.4f + 0.6f * forca)
             val tx = hx - dx * cauda; val ty = hy - dy * cauda
-            traco.shader = android.graphics.LinearGradient(hx, hy, tx, ty, Color.argb((forca * 255).toInt(), 255, 252, 240), 0x00FFFFFF, android.graphics.Shader.TileMode.CLAMP)
+            traco.shader = android.graphics.LinearGradient(hx, hy, tx, ty, if (claro) Color.argb((forca * 200).toInt(), 110, 140, 200) else Color.argb((forca * 255).toInt(), 255, 252, 240), 0x00FFFFFF, android.graphics.Shader.TileMode.CLAMP)
             traco.color = Color.WHITE
             traco.strokeWidth = d * 6f; traco.alpha = (forca * 60).toInt(); c.drawLine(hx, hy, tx, ty, traco)
             traco.strokeWidth = d * 2.6f; traco.alpha = 255; c.drawLine(hx, hy, tx, ty, traco)
             traco.shader = null
-            p.color = Color.argb((forca * 90).toInt(), 190, 215, 255); c.drawCircle(hx, hy, d * 12f, p)
-            p.color = Color.argb((forca * 255).toInt(), 255, 255, 255); c.drawCircle(hx, hy, d * 3f, p)
+            p.color = if (claro) Color.argb((forca * 60).toInt(), 140, 170, 230) else Color.argb((forca * 90).toInt(), 190, 215, 255); c.drawCircle(hx, hy, d * 12f, p)
+            p.color = if (claro) Color.argb((forca * 230).toInt(), 100, 130, 200) else Color.argb((forca * 255).toInt(), 255, 255, 255); c.drawCircle(hx, hy, d * 3f, p)
         }
         postInvalidateDelayed(40)
     }
@@ -2566,7 +2567,7 @@ class Efeitos(ctx: Context) : View(ctx) {
                     q[1] += (0.9f + q[2] * 0.6f) * dt; q[0] -= 0.12f * dt
                     if (q[1] > 1.05f) { q[1] = -0.05f; q[0] = rnd.nextFloat() * 1.1f }
                     val x = q[0] * w; val y = q[1] * h; val l = (14f + q[3] * 14f) * d
-                    linha.color = Color.argb((50 + q[3] * 70).toInt(), 200, 220, 255)
+                    linha.color = if (Cores.escuro) Color.argb((50 + q[3] * 70).toInt(), 200, 220, 255) else Color.argb((60 + q[3] * 80).toInt(), 110, 140, 190)
                     c.drawLine(x, y, x + l * 0.13f, y - l, linha)
                 }
             }
@@ -2575,7 +2576,7 @@ class Efeitos(ctx: Context) : View(ctx) {
                     q[1] += (0.05f + q[2] * 0.07f) * dt
                     if (q[1] > 1.03f) { q[1] = -0.03f; q[0] = rnd.nextFloat() }
                     val x = (q[0] + 0.02f * kotlin.math.sin(t * 0.8f + q[3] * 6f)) * w; val y = q[1] * h
-                    p.color = Color.argb((140 + q[3] * 110).toInt(), 255, 255, 255); c.drawCircle(x, y, (1.5f + q[2] * 3f) * d, p)
+                    p.color = if (Cores.escuro) Color.argb((140 + q[3] * 110).toInt(), 255, 255, 255) else Color.argb((110 + q[3] * 90).toInt(), 150, 175, 215); c.drawCircle(x, y, (1.5f + q[2] * 3f) * d, p)
                 }
             }
             "namorados" -> { // coraçõezinhos subindo
