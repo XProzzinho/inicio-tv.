@@ -97,6 +97,8 @@ class MainActivity : Activity() {
     private lateinit var saverClock: TextView
     private lateinit var saverTitle: TextView
     private lateinit var saverInfo: TextView
+    private lateinit var saverPrev: LinearLayout
+    private var saverPrevAt = 0L
     private var saverItems: List<Tmdb.Item> = emptyList()
     private var saverIndex = 0
     private val tabs = ArrayList<TextView>()
@@ -1929,8 +1931,17 @@ class MainActivity : Activity() {
             setPadding(0, dp(8), 0, 0)
             setShadowLayer(dpf(10), 0f, dpf(2), 0x80000000.toInt())
         }
+        // previsão do tempo dos próximos dias, numa faixa de vidro embaixo da data
+        saverPrev = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply { cornerRadius = dpf(24); setColor(0x33FFFFFF); setStroke(dp(1), 0x55FFFFFF) }
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            visibility = View.GONE
+        }
         col.addView(saverClock)
         col.addView(saverInfo)
+        col.addView(saverPrev, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(26) })
         f.addView(col, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
         // nome do filme lá embaixo, no meio
         saverTitle = TextView(this).apply {
@@ -1948,6 +1959,7 @@ class MainActivity : Activity() {
         saverClock.text = timeFmt.format(Date())
         saverInfo.text = infoDescanso()
         saverTitle.text = ""
+        previsaoDescanso()
         saver.alpha = 0f
         saver.visibility = View.VISIBLE
         saver.animate().alpha(1f).setDuration(600).start()
@@ -1957,6 +1969,32 @@ class MainActivity : Activity() {
                 handler.removeCallbacks(saverNext)
                 handler.post(saverNext)
             }
+        }
+    }
+
+    /** Previsão de 5 dias na tela de descanso (Hoje, Dom 22...): ícone, máxima e mínima. Atualiza no máximo de hora em hora. */
+    private fun previsaoDescanso() {
+        if (System.currentTimeMillis() - saverPrevAt < 60 * 60_000 && saverPrev.childCount > 0) return
+        Weather.week { dias ->
+            if (dias.isEmpty()) return@week
+            saverPrevAt = System.currentTimeMillis()
+            saverPrev.removeAllViews()
+            dias.take(5).forEachIndexed { i, d ->
+                val c = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(dp(16), 0, dp(16), 0) }
+                c.addView(TextView(this).apply {
+                    text = d.label.substringBefore(",").replaceFirstChar { it.uppercase() } + if (i == 0) "" else " " + d.label.substringAfter(", ", "")
+                    textSize = 14f; setTextColor(0xDDFFFFFF.toInt()); typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); gravity = Gravity.CENTER
+                })
+                c.addView(ImageView(this).apply { setImageResource(Weather.icon(d.code)) }, LinearLayout.LayoutParams(dp(34), dp(34)).apply { topMargin = dp(4); bottomMargin = dp(2) })
+                c.addView(TextView(this).apply {
+                    val txt = android.text.SpannableString("${d.max}°  ${d.min}°")
+                    txt.setSpan(android.text.style.ForegroundColorSpan(0x99FFFFFF.toInt()), txt.indexOf("  ") + 2, txt.length, 0)
+                    text = txt; textSize = 16f; setTextColor(Color.WHITE); typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); gravity = Gravity.CENTER
+                })
+                if (i > 0) saverPrev.addView(View(this).apply { setBackgroundColor(0x33FFFFFF) }, LinearLayout.LayoutParams(dp(1), dp(56)))
+                saverPrev.addView(c)
+            }
+            saverPrev.visibility = View.VISIBLE
         }
     }
 
