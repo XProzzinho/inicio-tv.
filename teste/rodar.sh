@@ -24,7 +24,7 @@ tecla DPAD_CENTER; sleep 3; foto 05-ok-no-topo
 adb shell appops set com.geanalves.tvhome SYSTEM_ALERT_WINDOW allow
 tecla BACK
 adb shell am start -n com.geanalves.tvhome/.MainActivity -e abrir brilho; sleep 3; foto 05c-brilho-100
-tecla DPAD_DOWN; tecla DPAD_DOWN; tecla DPAD_DOWN; foto 05d-brilho-70
+tecla DPAD_DOWN; tecla DPAD_DOWN; tecla DPAD_DOWN; tecla DPAD_DOWN; foto 05d-brilho-60
 tecla DPAD_UP; tecla DPAD_UP; tecla DPAD_UP; tecla BACK
 tecla BACK
 # 3) Volume (o número na tela)

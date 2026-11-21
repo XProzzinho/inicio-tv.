@@ -367,43 +367,59 @@ class MainActivity : Activity() {
         blocos.first().requestFocus()
     }
 
-    /** Brilho na lateral direita: barra em pé que enche de baixo pra cima (estilo iPhone). ▲ ▼ mudam de 10 em 10, OK ou Voltar fecha. */
+    /** Brilho na lateral direita, estilo ANEL: círculo que enche com o sol e o número no meio; − + e 100% embaixo.
+     *  ▲ ▼ mudam de 10 em 10; ◀ ▶ andam entre os botões; OK aperta; some sozinho. */
     private fun abrirBrilho() {
         val d = android.app.Dialog(this)
         d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
-        val alturaBarra = dp(250)
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             background = rounded(Cores.janela, 30)
-            setPadding(dp(20), dp(20), dp(20), dp(16))
+            setPadding(dp(24), dp(18), dp(24), dp(20))
             elevation = dpf(24)
         }
-        val num = TextView(this).apply {
-            textSize = 30f
+        box.addView(TextView(this).apply {
+            text = "Brilho"
+            textSize = 20f
             setTextColor(PRETO)
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-            gravity = Gravity.CENTER
-            fontFeatureSettings = "tnum"
+        })
+        var nivel = Brilho.atual(this)
+        val anel = object : View(this) {
+            val fundo = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { style = android.graphics.Paint.Style.STROKE; color = Cores.campo; strokeWidth = dpf(14) }
+            val cheio = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { style = android.graphics.Paint.Style.STROKE; color = PRETO; strokeWidth = dpf(14); strokeCap = android.graphics.Paint.Cap.ROUND }
+            val txt = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = PRETO; textAlign = android.graphics.Paint.Align.CENTER; textSize = dpf(34); typeface = Typeface.create("sans-serif-medium", Typeface.BOLD) }
+            val sol = this@MainActivity.getDrawable(R.drawable.ic_brilho)?.mutate()?.apply { setTint(PRETO) }
+            val r = android.graphics.RectF()
+            override fun onDraw(c: android.graphics.Canvas) {
+                val m = dpf(10); r.set(m, m, width - m, height - m)
+                c.drawArc(r, 0f, 360f, false, fundo)
+                c.drawArc(r, -90f, 360f * nivel / 100f, false, cheio)
+                val cx = width / 2; val s = dp(26)
+                sol?.setBounds(cx - s / 2, (height * 0.26f).toInt(), cx + s / 2, (height * 0.26f).toInt() + s); sol?.draw(c)
+                c.drawText("$nivel%", width / 2f, height * 0.68f, txt)
+            }
         }
-        val trilho = FrameLayout(this).apply {
-            background = rounded(Cores.campo, 26).apply { setStroke(dp(3), PRETO) }
-            clipToOutline = true
-            outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+        box.addView(anel, LinearLayout.LayoutParams(dp(170), dp(170)).apply { topMargin = dp(8); bottomMargin = dp(14) })
+        val fecha = Runnable { if (d.isShowing) d.dismiss() }
+        fun tempo() { handler.removeCallbacks(fecha); handler.postDelayed(fecha, 6000) }
+        fun muda(passo: Int?, fixo: Int? = null) {
+            val alvo = fixo ?: (Brilho.atual(this) + (passo ?: 0))
+            tempo()
+            if (alvo < 100 && Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(this)) {
+                Toast.makeText(this, "Libere \"Sobrepor a outros apps\" pro Início TV", Toast.LENGTH_LONG).show()
+                try { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:$packageName"))) } catch (_: Throwable) {}
+                return
+            }
+            nivel = Brilho.aplicar(this, alvo); anel.invalidate()
         }
-        val cheio = View(this).apply { background = rounded(PRETO, 0) }
-        trilho.addView(cheio, FrameLayout.LayoutParams(MATCH, 0, Gravity.BOTTOM))
-        val sol = ImageView(this).apply { setImageResource(R.drawable.ic_brilho); setColorFilter(Color.WHITE) }
-        trilho.addView(sol, FrameLayout.LayoutParams(dp(30), dp(30), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(16) })
-        val dica = TextView(this).apply {
-            text = "▲ ▼"
-            textSize = 14f
-            setTextColor(Cores.cinza)
-            gravity = Gravity.CENTER
-        }
-        box.addView(num, LinearLayout.LayoutParams(WRAP, WRAP))
-        box.addView(trilho, LinearLayout.LayoutParams(dp(78), alturaBarra).apply { topMargin = dp(12); bottomMargin = dp(10) })
-        box.addView(dica, LinearLayout.LayoutParams(WRAP, WRAP))
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        fun bola(t: String, larg: Int, acao: () -> Unit) = pill(t) { acao() }.apply { textSize = if (t.length == 1) 24f else 16f; setPadding(0, dp(8), 0, dp(8)) }.also { row.addView(it, LinearLayout.LayoutParams(dp(larg), dp(48)).apply { if (row.childCount > 0) leftMargin = dp(10) }) }
+        bola("−", 56) { muda(-10) }
+        val mais = bola("+", 56) { muda(10) }
+        bola("100%", 74) { muda(null, 100) }
+        box.addView(row)
         d.setContentView(box)
         d.window?.apply {
             setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
@@ -411,37 +427,18 @@ class MainActivity : Activity() {
             setGravity(Gravity.END or Gravity.CENTER_VERTICAL)
             attributes = attributes.apply { x = dp(40) }
         }
-        val fecha = Runnable { if (d.isShowing) d.dismiss() }
-        fun mostra(n: Int) {
-            num.text = "$n%"
-            val h = (alturaBarra - dp(6)) * n / 100
-            cheio.layoutParams = (cheio.layoutParams as FrameLayout.LayoutParams).apply { height = h }
-            cheio.requestLayout()
-            sol.setColorFilter(if (n >= 22) Color.WHITE else PRETO)
-            handler.removeCallbacks(fecha)
-            handler.postDelayed(fecha, 5000)
-        }
-        fun muda(passo: Int) {
-            val alvo = Brilho.atual(this) + passo
-            if (alvo < 100 && Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(this)) {
-                dica.text = "Libere \"Sobrepor\na outros apps\""
-                try { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:$packageName"))) } catch (_: Throwable) {}
-                return
-            }
-            mostra(Brilho.aplicar(this, alvo))
-        }
         d.setOnKeyListener { _, code, ev ->
             if (ev.action != android.view.KeyEvent.ACTION_DOWN) return@setOnKeyListener false
             when (code) {
-                android.view.KeyEvent.KEYCODE_DPAD_UP, android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> { muda(10); true }
-                android.view.KeyEvent.KEYCODE_DPAD_DOWN, android.view.KeyEvent.KEYCODE_DPAD_LEFT -> { muda(-10); true }
-                android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER -> { d.dismiss(); true }
-                else -> false
+                android.view.KeyEvent.KEYCODE_DPAD_UP -> { muda(10); true }
+                android.view.KeyEvent.KEYCODE_DPAD_DOWN -> { muda(-10); true }
+                else -> { tempo(); false }
             }
         }
         d.setOnDismissListener { handler.removeCallbacks(fecha) }
         d.show()
-        mostra(Brilho.atual(this))
+        mais.requestFocus()
+        tempo()
     }
 
     private fun trocarModo() {
