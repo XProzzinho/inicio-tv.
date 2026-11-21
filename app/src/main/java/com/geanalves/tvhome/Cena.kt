@@ -181,11 +181,11 @@ class Cena(ctx: Context, private val claro: Boolean = false, private val descans
         fun glow(x: Float, y: Float, r: Float, cr: Int) { g.shader = RadialGradient(x, y, r, cr, 0, Shader.TileMode.CLAMP); c.drawCircle(x, y, r, g) }
         val limpo = tempo == Tempo.LIMPO || tempo == Tempo.PARCIAL
         when {
-            limpo && periodo == Periodo.DIA -> glow(W * 0.80f, H * 0.18f, W * 0.45f, 0x66FFF2C0)
-            limpo && periodo != Periodo.NOITE -> { glow(W * 0.78f, H * 0.80f, W * 0.55f, 0x88FFB060.toInt()); glow(W * 0.78f, H * 0.80f, W * 0.2f, 0x99FFE0A0.toInt()) }
+            limpo && periodo == Periodo.DIA -> glow(W * (if (descanso) 0.80f else 0.635f), H * (if (descanso) 0.18f else 0.11f), W * 0.45f, 0x66FFF2C0)
+            limpo && periodo != Periodo.NOITE -> { glow(W * 0.88f, H * 0.86f, W * 0.55f, 0x88FFB060.toInt()); glow(W * 0.88f, H * 0.86f, W * 0.2f, 0x99FFE0A0.toInt()) }
             limpo && noite -> {
                 glow(W * 0.30f, H * 0.55f, W * 0.40f, 0x222E5BFF)
-                glow(W * 0.78f, H * 0.20f, W * (if (luaCheia()) 0.42f else 0.25f), if (luaCheia()) 0x40C8DCFF else 0x22C8DCFF)
+                glow(W * (if (descanso) 0.80f else 0.635f), H * (if (descanso) 0.18f else 0.11f), W * (if (luaCheia()) 0.42f else 0.25f), if (luaCheia()) 0x40C8DCFF else 0x22C8DCFF)
             }
             tempo == Tempo.TEMPESTADE || tempo == Tempo.CHUVA -> glow(W * 0.5f, H * 1.1f, W * 0.7f, 0x22000000)
             tempo == Tempo.NEBLINA -> glow(W * 0.5f, H * 0.9f, W * 0.8f, 0x55FFFFFF)
@@ -193,7 +193,7 @@ class Cena(ctx: Context, private val claro: Boolean = false, private val descans
         }
         // véu pra o texto da tela ficar legível
         when {
-            claro -> c.drawColor(if (noite) 0x8CEEF2F8.toInt() else 0x99F7F8FB.toInt())
+            claro -> c.drawColor(if (noite) 0xB8EEF2F8.toInt() else 0x99F7F8FB.toInt())
             descanso -> if (!noite) c.drawColor(0x26000000)
             else -> c.drawColor(if (noite) 0x14000000 else 0x66101828)
         }
@@ -318,7 +318,7 @@ class Cena(ctx: Context, private val claro: Boolean = false, private val descans
         val f = faseLua(); if (f < 0.03f || f > 0.97f) return
         val cheia = f in 0.46f..0.54f
         val r = (if (descanso) 34f else 24f) * d * (if (cheia) 1.15f else 1f)
-        val lx = w * 0.78f; val ly = h * 0.20f
+        val lx = w * (if (descanso) 0.80f else 0.635f); val ly = h * (if (descanso) 0.18f else 0.11f)
         val atras = if (tempo == Tempo.NUBLADO || tempo == Tempo.NEBLINA || tempo == Tempo.GAROA) 0.35f else 1f
         if (!claro) {
             val pul = 0.85f + 0.15f * sin(t * 0.5f)
@@ -339,8 +339,8 @@ class Cena(ctx: Context, private val claro: Boolean = false, private val descans
 
     private fun desenhaSol(c: Canvas, w: Float, h: Float, t: Float) {
         val baixo = periodo != Periodo.DIA
-        val sx = w * (if (baixo) 0.78f else 0.80f); val sy = h * (if (baixo) 0.80f else 0.18f)
-        val r = (if (descanso) 46f else 34f) * d
+        val sx = w * (if (baixo) 0.88f else if (descanso) 0.80f else 0.635f); val sy = h * (if (baixo) 0.86f else if (descanso) 0.18f else 0.11f)
+        val r = (if (descanso) 46f else 28f) * d
         val corSol = if (baixo) 0xFFFFC27A.toInt() else 0xFFFFF4C8.toInt()
         val fraco = if (claro) 0.55f else 1f
         // raios girando
