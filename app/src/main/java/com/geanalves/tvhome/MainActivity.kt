@@ -257,6 +257,7 @@ class MainActivity : Activity() {
         // atalho: abrir a janela do brilho direto (usado no teste e por outros apps)
         if (intent?.getStringExtra("abrir") == "brilho") handler.postDelayed({ abrirBrilho() }, 400)
         if (intent?.getStringExtra("abrir") == "descanso") handler.postDelayed({ showSaver() }, 400)
+        if (intent?.getStringExtra("abrir") == "modo") handler.postDelayed({ trocarModo() }, 400)
     }
 
     @Deprecated("Tela inicial não fecha com o botão Voltar")
@@ -545,6 +546,8 @@ class MainActivity : Activity() {
             },
             FrameLayout.LayoutParams(MATCH, MATCH),
         )
+        // modo escuro: céu azul-noite com estrelinhas piscando e brilhos suaves
+        if (Cores.escuro) root.addView(Estrelas(this), FrameLayout.LayoutParams(MATCH, MATCH))
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -2336,3 +2339,31 @@ class MainActivity : Activity() {
         private const val WRAP = ViewGroup.LayoutParams.WRAP_CONTENT
     }
 }
+
+/** Fundo do modo escuro: brilhos azulados e estrelinhas que piscam devagar (leve, 10 quadros por segundo). */
+class Estrelas(ctx: Context) : View(ctx) {
+    private val rnd = java.util.Random(7)
+    private val pts = Array(90) { floatArrayOf(rnd.nextFloat(), rnd.nextFloat() * 0.75f, 0.6f + rnd.nextFloat() * 1.8f, rnd.nextFloat() * 6.28f, 0.5f + rnd.nextFloat()) }
+    private val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    private val brilho = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    private val t0 = System.currentTimeMillis()
+    override fun onDraw(c: android.graphics.Canvas) {
+        val w = width.toFloat(); val h = height.toFloat(); if (w <= 0f) return
+        val d = resources.displayMetrics.density
+        fun glow(x: Float, y: Float, r: Float, cor: Int) {
+            brilho.shader = android.graphics.RadialGradient(x, y, r, cor, 0x00000000, android.graphics.Shader.TileMode.CLAMP)
+            c.drawCircle(x, y, r, brilho)
+        }
+        glow(w * 0.42f, h * 0.48f, w * 0.38f, 0x332E5BFF)
+        glow(w * 0.86f, h * 0.22f, w * 0.22f, 0x2240A0FF)
+        glow(w * 0.10f, h * 0.10f, w * 0.18f, 0x1A9A6BFF)
+        val t = (System.currentTimeMillis() - t0) / 1000f
+        for (s in pts) {
+            val a = (0.35f + 0.65f * (0.5f + 0.5f * kotlin.math.sin(t * s[4] + s[3])))
+            p.color = Color.argb((a * 200).toInt(), 255, 244, 214)
+            c.drawCircle(s[0] * w, s[1] * h, s[2] * d * 0.9f, p)
+        }
+        postInvalidateDelayed(100)
+    }
+}
+

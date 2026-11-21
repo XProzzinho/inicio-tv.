@@ -30,6 +30,10 @@ tecla BACK
 # 3c) Tela de descanso (hora no centro)
 adb shell am start -n com.geanalves.tvhome/.MainActivity -e abrir descanso; sleep 20; foto 05e-descanso
 tecla BACK
+# 3d) Modo escuro (céu azul com estrelas)
+adb shell am start -n com.geanalves.tvhome/.MainActivity -e abrir modo; sleep 15; foto 05f-escuro
+tecla DPAD_DOWN; sleep 2; foto 05g-escuro-foco
+adb shell am start -n com.geanalves.tvhome/.MainActivity -e abrir modo; sleep 8
 # 3) Volume (o número na tela)
 tecla VOLUME_UP; foto 06-volume
 # 4) Tela de todos os apps
