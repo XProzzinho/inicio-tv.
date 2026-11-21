@@ -381,10 +381,11 @@ class MainActivity : Activity() {
         }
         box.addView(TextView(this).apply {
             text = "Brilho"
+            gravity = Gravity.CENTER
             textSize = 20f
             setTextColor(PRETO)
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
-        })
+        }, LinearLayout.LayoutParams(MATCH, WRAP))
         var nivel = Brilho.atual(this)
         val anel = object : View(this) {
             val fundo = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { style = android.graphics.Paint.Style.STROKE; color = Cores.campo; strokeWidth = dpf(14) }
@@ -419,13 +420,14 @@ class MainActivity : Activity() {
         bola("−", 56) { muda(-10) }
         val mais = bola("+", 56) { muda(10) }
         bola("100%", 74) { muda(null, 100) }
-        box.addView(row)
+        box.addView(row, LinearLayout.LayoutParams(WRAP, WRAP).apply { bottomMargin = dp(4) })
         d.setContentView(box)
         d.window?.apply {
             setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
             setDimAmount(0f)
             setGravity(Gravity.END or Gravity.CENTER_VERTICAL)
             attributes = attributes.apply { x = dp(40) }
+            setLayout(dp(280), android.view.ViewGroup.LayoutParams.WRAP_CONTENT)
         }
         d.setOnKeyListener { _, code, ev ->
             if (ev.action != android.view.KeyEvent.ACTION_DOWN) return@setOnKeyListener false
