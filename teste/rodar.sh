@@ -20,6 +20,12 @@ tecla DPAD_DOWN; foto 02-baixo
 tecla DPAD_RIGHT; tecla DPAD_RIGHT; foto 03-direita
 tecla DPAD_UP; tecla DPAD_UP; foto 04-topo
 tecla DPAD_CENTER; sleep 3; foto 05-ok-no-topo
+# 3b) Brilho na lateral: Ajustes > Brilho, abaixa 3 vezes
+adb shell appops set com.geanalves.tvhome SYSTEM_ALERT_WINDOW allow
+tecla DPAD_DOWN; tecla DPAD_RIGHT; foto 05b-ajustes-brilho
+tecla DPAD_CENTER; sleep 2; foto 05c-brilho-100
+tecla DPAD_DOWN; tecla DPAD_DOWN; tecla DPAD_DOWN; foto 05d-brilho-70
+tecla DPAD_UP; tecla DPAD_UP; tecla DPAD_UP; tecla BACK
 tecla BACK
 # 3) Volume (o número na tela)
 tecla VOLUME_UP; foto 06-volume

@@ -365,52 +365,81 @@ class MainActivity : Activity() {
         blocos.first().requestFocus()
     }
 
-    /** Janela do brilho: − e + (de 10 em 10), o número grande no meio. Setas ◀ ▶ do controle também mudam. */
+    /** Brilho na lateral direita: barra em pé que enche de baixo pra cima (estilo iPhone). ▲ ▼ mudam de 10 em 10, OK ou Voltar fecha. */
     private fun abrirBrilho() {
-        val (d, box) = whiteDialog()
-        box.addView(dialogTitle("Brilho"))
+        val d = android.app.Dialog(this)
+        d.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE)
+        val alturaBarra = dp(250)
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            background = rounded(Cores.janela, 30)
+            setPadding(dp(20), dp(20), dp(20), dp(16))
+            elevation = dpf(24)
+        }
         val num = TextView(this).apply {
-            textSize = 64f
+            textSize = 30f
             setTextColor(PRETO)
             typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
             gravity = Gravity.CENTER
             fontFeatureSettings = "tnum"
         }
-        val aviso = TextView(this).apply {
+        val trilho = FrameLayout(this).apply {
+            background = rounded(Cores.campo, 26).apply { setStroke(dp(3), PRETO) }
+            clipToOutline = true
+            outlineProvider = android.view.ViewOutlineProvider.BACKGROUND
+        }
+        val cheio = View(this).apply { background = rounded(PRETO, 0) }
+        trilho.addView(cheio, FrameLayout.LayoutParams(MATCH, 0, Gravity.BOTTOM))
+        val sol = ImageView(this).apply { setImageResource(R.drawable.ic_brilho); setColorFilter(Color.WHITE) }
+        trilho.addView(sol, FrameLayout.LayoutParams(dp(30), dp(30), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(16) })
+        val dica = TextView(this).apply {
+            text = "▲ ▼"
             textSize = 14f
             setTextColor(Cores.cinza)
             gravity = Gravity.CENTER
-            setPadding(0, dp(4), 0, dp(14))
         }
-        fun mostra(n: Int) { num.text = "$n%"; aviso.text = if (n <= 20) "bom pra dormir" else if (n >= 100) "brilho normal" else "" }
-        fun muda(passo: Int?, fixo: Int? = null) {
-            val alvo = fixo ?: (Brilho.atual(this) + (passo ?: 0))
+        box.addView(num, LinearLayout.LayoutParams(WRAP, WRAP))
+        box.addView(trilho, LinearLayout.LayoutParams(dp(78), alturaBarra).apply { topMargin = dp(12); bottomMargin = dp(10) })
+        box.addView(dica, LinearLayout.LayoutParams(WRAP, WRAP))
+        d.setContentView(box)
+        d.window?.apply {
+            setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+            setDimAmount(0f)
+            setGravity(Gravity.END or Gravity.CENTER_VERTICAL)
+            attributes = attributes.apply { x = dp(40) }
+        }
+        val fecha = Runnable { if (d.isShowing) d.dismiss() }
+        fun mostra(n: Int) {
+            num.text = "$n%"
+            val h = (alturaBarra - dp(6)) * n / 100
+            cheio.layoutParams = (cheio.layoutParams as FrameLayout.LayoutParams).apply { height = h }
+            cheio.requestLayout()
+            sol.setColorFilter(if (n >= 22) Color.WHITE else PRETO)
+            handler.removeCallbacks(fecha)
+            handler.postDelayed(fecha, 5000)
+        }
+        fun muda(passo: Int) {
+            val alvo = Brilho.atual(this) + passo
             if (alvo < 100 && Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(this)) {
-                aviso.text = "Libere \"Sobrepor a outros apps\" pro Início TV"
+                dica.text = "Libere \"Sobrepor\na outros apps\""
                 try { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:$packageName"))) } catch (_: Throwable) {}
                 return
             }
             mostra(Brilho.aplicar(this, alvo))
         }
-        mostra(Brilho.atual(this))
-        box.addView(num, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(6) })
-        box.addView(aviso, LinearLayout.LayoutParams(WRAP, WRAP))
-        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        val menos = pill("−  Abaixar") { muda(-10) }
-        val mais = pill("＋  Aumentar") { muda(10) }
-        val normal = pill("100%") { muda(null, 100) }
-        listOf(menos, mais, normal).forEachIndexed { i, v -> row.addView(v, LinearLayout.LayoutParams(WRAP, WRAP).apply { if (i > 0) leftMargin = dp(12) }) }
-        box.addView(row)
         d.setOnKeyListener { _, code, ev ->
             if (ev.action != android.view.KeyEvent.ACTION_DOWN) return@setOnKeyListener false
             when (code) {
-                android.view.KeyEvent.KEYCODE_DPAD_UP -> { muda(10); true }
-                android.view.KeyEvent.KEYCODE_DPAD_DOWN -> { muda(-10); true }
+                android.view.KeyEvent.KEYCODE_DPAD_UP, android.view.KeyEvent.KEYCODE_DPAD_RIGHT -> { muda(10); true }
+                android.view.KeyEvent.KEYCODE_DPAD_DOWN, android.view.KeyEvent.KEYCODE_DPAD_LEFT -> { muda(-10); true }
+                android.view.KeyEvent.KEYCODE_DPAD_CENTER, android.view.KeyEvent.KEYCODE_ENTER -> { d.dismiss(); true }
                 else -> false
             }
         }
+        d.setOnDismissListener { handler.removeCallbacks(fecha) }
         d.show()
-        mais.requestFocus()
+        mostra(Brilho.atual(this))
     }
 
     private fun trocarModo() {
