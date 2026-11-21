@@ -1939,10 +1939,10 @@ class MainActivity : Activity() {
             setPadding(dp(14), dp(10), dp(14), dp(10))
             visibility = View.GONE
         }
-        col.addView(saverClock)
-        col.addView(saverInfo)
+        col.addView(saverClock, LinearLayout.LayoutParams(MATCH, WRAP))
+        col.addView(saverInfo, LinearLayout.LayoutParams(MATCH, WRAP))
         col.addView(saverPrev, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(26) })
-        f.addView(col, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+        f.addView(col, FrameLayout.LayoutParams(MATCH, WRAP, Gravity.CENTER))
         // nome do filme lá embaixo, no meio
         saverTitle = TextView(this).apply {
             textSize = 17f
@@ -1980,19 +1980,19 @@ class MainActivity : Activity() {
             saverPrevAt = System.currentTimeMillis()
             saverPrev.removeAllViews()
             dias.take(5).forEachIndexed { i, d ->
-                val c = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL; setPadding(dp(16), 0, dp(16), 0) }
+                val c = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
                 c.addView(TextView(this).apply {
                     text = d.label.substringBefore(",").replaceFirstChar { it.uppercase() } + if (i == 0) "" else " " + d.label.substringAfter(", ", "")
                     textSize = 14f; setTextColor(0xDDFFFFFF.toInt()); typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); gravity = Gravity.CENTER
-                })
+                }, LinearLayout.LayoutParams(MATCH, WRAP))
                 c.addView(ImageView(this).apply { setImageResource(Weather.icon(d.code)) }, LinearLayout.LayoutParams(dp(34), dp(34)).apply { topMargin = dp(4); bottomMargin = dp(2) })
                 c.addView(TextView(this).apply {
                     val txt = android.text.SpannableString("${d.max}°  ${d.min}°")
                     txt.setSpan(android.text.style.ForegroundColorSpan(0x99FFFFFF.toInt()), txt.indexOf("  ") + 2, txt.length, 0)
                     text = txt; textSize = 16f; setTextColor(Color.WHITE); typeface = Typeface.create("sans-serif-medium", Typeface.BOLD); gravity = Gravity.CENTER
-                })
+                }, LinearLayout.LayoutParams(MATCH, WRAP))
                 if (i > 0) saverPrev.addView(View(this).apply { setBackgroundColor(0x33FFFFFF) }, LinearLayout.LayoutParams(dp(1), dp(56)))
-                saverPrev.addView(c)
+                saverPrev.addView(c, LinearLayout.LayoutParams(dp(104), WRAP))
             }
             saverPrev.visibility = View.VISIBLE
         }
