@@ -33,6 +33,11 @@ tecla BACK
 # 3d) Modo escuro (céu azul com estrelas)
 adb shell am start -n com.geanalves.tvhome/.MainActivity -e abrir modo; sleep 4; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do foto 05f-escuro-$i; sleep 0.4; done
 tecla DPAD_DOWN; sleep 2; foto 05g-escuro-foco
+adb shell am start -n com.geanalves.tvhome/.MainActivity -e efeito natal; sleep 3; foto 05h-natal
+adb shell am start -n com.geanalves.tvhome/.MainActivity -e efeito ano; sleep 3; foto 05i-ano
+adb shell am start -n com.geanalves.tvhome/.MainActivity -e efeito namorados; sleep 3; foto 05j-namorados
+adb shell am start -n com.geanalves.tvhome/.MainActivity -e efeito chuva; sleep 3; foto 05k-chuva
+adb shell am start -n com.geanalves.tvhome/.MainActivity -e efeito nada; sleep 2
 adb shell am start -n com.geanalves.tvhome/.MainActivity -e abrir modo; sleep 8
 # 3) Volume (o número na tela)
 tecla VOLUME_UP; foto 06-volume

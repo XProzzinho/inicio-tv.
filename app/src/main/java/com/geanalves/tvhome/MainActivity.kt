@@ -54,6 +54,8 @@ class MainActivity : Activity() {
 
     private lateinit var prefs: Prefs
     private lateinit var bgImage: ImageView
+    private lateinit var efeitos: Efeitos
+    private lateinit var conteudo: LinearLayout
     private lateinit var cardsScroll: HorizontalScrollView
     private lateinit var cardsRow: LinearLayout
     private lateinit var statusText: TextView
@@ -189,6 +191,18 @@ class MainActivity : Activity() {
         refreshProfile()
         buildDock()
         selectTab(0)
+        entradaAnimada()
+    }
+
+    /** Ao ligar a TV: o topo, os cartazes e a barra de apps entram deslizando, um depois do outro. */
+    private fun entradaAnimada() {
+        for (i in 0 until conteudo.childCount) {
+            val v = conteudo.getChildAt(i)
+            v.alpha = 0f
+            v.translationY = dpf(36)
+            v.animate().alpha(1f).translationY(0f).setStartDelay(120L + i * 140L).setDuration(520)
+                .setInterpolator(android.view.animation.DecelerateInterpolator(2f)).start()
+        }
     }
 
     /** Avisa o Lumi TV qual perfil está em uso (favoritos por perfil e modo infantil). */
@@ -258,6 +272,7 @@ class MainActivity : Activity() {
         if (intent?.getStringExtra("abrir") == "brilho") handler.postDelayed({ abrirBrilho() }, 400)
         if (intent?.getStringExtra("abrir") == "descanso") handler.postDelayed({ showSaver() }, 400)
         if (intent?.getStringExtra("abrir") == "modo") handler.postDelayed({ trocarModo() }, 400)
+        intent?.getStringExtra("efeito")?.let { e -> if (::efeitos.isInitialized) efeitos.forcar(e) }
     }
 
     @Deprecated("Tela inicial não fecha com o botão Voltar")
@@ -477,6 +492,7 @@ class MainActivity : Activity() {
     /** Texto do clima com o ícone do tempo na frente. */
     private fun mostrarClima(t: String) {
         weatherText.text = t
+        if (::efeitos.isInitialized) efeitos.chovendo = Regex("chuva|garoa|trovoada|tempestade", RegexOption.IGNORE_CASE).containsMatchIn(t)
         val low = t.lowercase()
         val res = when {
             "trovoada" in low -> R.drawable.tempo_trovoada
@@ -548,6 +564,9 @@ class MainActivity : Activity() {
         )
         // modo escuro: céu azul-noite com estrelinhas piscando e brilhos suaves
         if (Cores.escuro) root.addView(Estrelas(this), FrameLayout.LayoutParams(MATCH, MATCH))
+        // datas especiais (Natal, Ano Novo, Namorados) e chuva de verdade em Pirapora
+        efeitos = Efeitos(this)
+        root.addView(efeitos, FrameLayout.LayoutParams(MATCH, MATCH))
 
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -556,6 +575,7 @@ class MainActivity : Activity() {
             clipToPadding = false
         }
         root.addView(content, FrameLayout.LayoutParams(MATCH, MATCH))
+        conteudo = content
 
         // --- topo: título + abas | relógio + botões
         // Nada aqui corta a bolinha do perfil quando ela cresce
@@ -1169,7 +1189,21 @@ class MainActivity : Activity() {
             frame.outlineSpotShadowColor = Color.BLACK
             frame.outlineAmbientShadowColor = Color.BLACK
         }
+        // luz que passa por cima da capa quando você para nela
+        val luz = View(this).apply {
+            background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(0x00FFFFFF, 0x55FFFFFF, 0x00FFFFFF))
+            rotation = 18f
+            visibility = View.INVISIBLE
+        }
+        frame.addView(luz, FrameLayout.LayoutParams(cardH / 2, (cardH * 1.6f).toInt(), Gravity.CENTER_VERTICAL))
         frame.setOnFocusChangeListener { v, has ->
+            if (has) v.postDelayed({
+                if (!v.hasFocus()) return@postDelayed
+                luz.translationX = -cardH.toFloat(); luz.visibility = View.VISIBLE
+                luz.animate().translationX(v.width.toFloat() + cardH / 2f).setDuration(750)
+                    .setInterpolator(android.view.animation.AccelerateDecelerateInterpolator())
+                    .withEndAction { luz.visibility = View.INVISIBLE }.start()
+            }, 240)
             v.foreground = if (has) bordaClara else bordaFina
             v.animate()
                 .scaleX(if (has) 1.06f else 1f)
@@ -1251,13 +1285,16 @@ class MainActivity : Activity() {
 
     private fun setBackdrop(b: Bitmap?) {
         // Fundo sempre branco e limpo: não mostra mais o filme atrás
-        if (!FUNDO_COM_FILME || b == null) {
+        if (!(FUNDO_COM_FILME || Cores.escuro) || b == null) {
             bgImage.animate().alpha(0f).setDuration(300).start()
             return
         }
-        bgImage.setImageBitmap(Tmdb.blur(b))
-        bgImage.alpha = 0.35f
-        bgImage.animate().alpha(0.95f).setDuration(450).start()
+        // troca suave: some um pouco, troca a imagem desfocada e volta
+        val alvo = if (Cores.escuro) 0.5f else 0.95f
+        bgImage.animate().alpha(0.15f).setDuration(220).withEndAction {
+            bgImage.setImageBitmap(Tmdb.blur(b))
+            bgImage.animate().alpha(alvo).setDuration(520).start()
+        }.start()
     }
 
     private fun openCard(c: Card) {
@@ -2340,48 +2377,111 @@ class MainActivity : Activity() {
     }
 }
 
-/** Fundo do modo escuro animado: estrelas piscando (as maiores com brilho em cruz), poeirinha de luz
- *  subindo devagar e, de vez em quando, uma ESTRELA CADENTE riscando o céu. Os brilhos azuis são desenhados uma vez só. */
+/** Fundo do modo escuro animado: céu que muda de cor com a hora, aurora, lua na fase de verdade,
+ *  estrelas piscando (as maiores com brilho em cruz), constelações que aparecem e somem,
+ *  poeirinha de luz subindo e ESTRELA CADENTE. Os brilhos fixos são desenhados uma vez só. */
 class Estrelas(ctx: Context) : View(ctx) {
     private val rnd = java.util.Random(7)
-    // estrelas fixas: x, y, tamanho, fase, velocidade do pisca
     private val pts = Array(80) { floatArrayOf(rnd.nextFloat(), rnd.nextFloat() * 0.75f, 0.6f + rnd.nextFloat() * 1.8f, rnd.nextFloat() * 6.28f, 0.4f + rnd.nextFloat() * 0.8f) }
-    // poeirinha de luz: x, y, tamanho, velocidade de subida, balanço
     private val po = Array(26) { floatArrayOf(rnd.nextFloat(), rnd.nextFloat(), 1.2f + rnd.nextFloat() * 2.2f, 0.012f + rnd.nextFloat() * 0.025f, rnd.nextFloat() * 6.28f) }
     private val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
     private val traco = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { strokeCap = android.graphics.Paint.Cap.ROUND }
+    private val aur = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    private val corta = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR) }
     private var fundo: android.graphics.Bitmap? = null
+    private var fundoHora = -1
     private val t0 = System.currentTimeMillis()
     private var ultimo = t0
-    // estrela cadente: começo (x,y), direção, quando nasceu
     private var cadT = -100f; private var cadX = 0f; private var cadY = 0f; private var proxCad = 1.2f
-    override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) {
+    private var conT = -100f; private var proxCon = 4f; private var con: IntArray = IntArray(0)
+    private val caminho = android.graphics.Path()
+
+    /** Fundo fixo (brilhos + cor do céu conforme a hora): refeito quando muda a hora. */
+    private fun montaFundo(w: Int, h: Int) {
         if (w <= 0 || h <= 0) return
+        val hora = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
         val b = android.graphics.Bitmap.createBitmap(w / 2, h / 2, android.graphics.Bitmap.Config.ARGB_8888)
         val c = android.graphics.Canvas(b); val g = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
-        fun glow(x: Float, y: Float, r: Float, cor: Int) { g.shader = android.graphics.RadialGradient(x, y, r, cor, 0, android.graphics.Shader.TileMode.CLAMP); c.drawCircle(x, y, r, g) }
         val W = b.width.toFloat(); val H = b.height.toFloat()
+        // céu muda com a hora: nascer do sol alaranjado, fim da tarde roxo, noite azul
+        val tinta = when (hora) { in 5..6 -> 0x55FF8A3D; in 17..18 -> 0x55B04AD8; 19 -> 0x33703AC8; else -> 0 }
+        if (tinta != 0) { g.shader = android.graphics.LinearGradient(0f, H, 0f, H * 0.2f, tinta, 0, android.graphics.Shader.TileMode.CLAMP); c.drawRect(0f, 0f, W, H, g) }
+        fun glow(x: Float, y: Float, r: Float, cor: Int) { g.shader = android.graphics.RadialGradient(x, y, r, cor, 0, android.graphics.Shader.TileMode.CLAMP); c.drawCircle(x, y, r, g) }
         glow(W * 0.42f, H * 0.48f, W * 0.38f, 0x332E5BFF); glow(W * 0.86f, H * 0.22f, W * 0.22f, 0x2240A0FF); glow(W * 0.10f, H * 0.10f, W * 0.18f, 0x1A9A6BFF)
-        fundo = b
+        fundo = b; fundoHora = hora
     }
+    override fun onSizeChanged(w: Int, h: Int, ow: Int, oh: Int) = montaFundo(w, h)
+
+    /** Fase da lua de 0 (nova) a 1 (nova de novo); 0,5 = cheia. */
+    private fun faseLua(): Float {
+        val dias = (System.currentTimeMillis() - 947182440000L) / 86400000.0 // lua nova de 6/jan/2000 18:14 UTC
+        val f = (dias / 29.530588853) % 1.0
+        return (if (f < 0) f + 1 else f).toFloat()
+    }
+
     private val dst = android.graphics.Rect()
     override fun onDraw(c: android.graphics.Canvas) {
         val w = width.toFloat(); val h = height.toFloat(); if (w <= 0f) return
         val agora = System.currentTimeMillis(); val dt = ((agora - ultimo) / 1000f).coerceIn(0f, 0.1f); ultimo = agora
+        if (java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) != fundoHora) montaFundo(width, height)
         fundo?.let { dst.set(0, 0, width, height); c.drawBitmap(it, null, dst, null) }
         val d = resources.displayMetrics.density
         val t = (agora - t0) / 1000f
+
+        // AURORA: duas faixas de luz (verde e roxa) ondulando devagar lá em cima
+        for ((k, cor) in listOf(0x2E3DFFB0, 0x26B06CFF).withIndex()) {
+            caminho.reset()
+            val base = h * (0.03f + k * 0.05f); val alt = h * 0.16f
+            var x = 0f; caminho.moveTo(0f, base)
+            while (x <= w) { caminho.lineTo(x, base + kotlin.math.sin(x / w * 7f + t * (0.25f + k * 0.12f) + k * 2f) * h * 0.035f); x += w / 24f }
+            x = w; while (x >= 0f) { caminho.lineTo(x, base + alt + kotlin.math.sin(x / w * 5f + t * 0.2f + k) * h * 0.04f); x -= w / 24f }
+            caminho.close()
+            val pul = 0.65f + 0.35f * kotlin.math.sin(t * 0.4f + k * 1.7f)
+            aur.shader = android.graphics.LinearGradient(0f, base, 0f, base + alt, (cor.toLong() and 0xFFFFFF or ((((cor ushr 24) * pul).toLong()) shl 24)).toInt(), 0, android.graphics.Shader.TileMode.CLAMP)
+            c.drawPath(caminho, aur)
+        }
+
+        // LUA na fase de verdade, perto da hora
+        run {
+            val r = 22f * d; val lx = w * 0.64f; val ly = h * 0.12f; val f = faseLua()
+            if (f > 0.03f && f < 0.97f) {
+                p.color = 0x22FFF2CC; c.drawCircle(lx, ly, r * 2.4f, p); p.color = 0x14FFF2CC; c.drawCircle(lx, ly, r * 3.6f, p)
+                val camada = c.saveLayer(lx - r * 2, ly - r * 2, lx + r * 2, ly + r * 2, null)
+                p.color = 0xFFFFF4D6.toInt(); c.drawCircle(lx, ly, r, p)
+                val k = f * 2f // 0..2
+                val desloca = if (k < 1f) -2f * r * k else 2f * r * (2f - k) // crescente: sombra à esquerda; minguante: à direita
+                if (kotlin.math.abs(desloca) < 2f * r) c.drawCircle(lx + desloca, ly, r * 1.02f, corta)
+                c.restoreToCount(camada)
+            }
+        }
+
         // estrelas piscando
         for (s in pts) {
             val a = 0.3f + 0.7f * (0.5f + 0.5f * kotlin.math.sin(t * s[4] + s[3]))
             val x = s[0] * w; val y = s[1] * h; val r = s[2] * d * 0.9f
             p.color = Color.argb((a * 210).toInt(), 255, 244, 214)
             c.drawCircle(x, y, r, p)
-            if (s[2] > 2.1f && a > 0.75f) { // brilho em cruz nas maiores
+            if (s[2] > 2.1f && a > 0.75f) {
                 traco.strokeWidth = d * 0.8f; traco.color = Color.argb(((a - 0.75f) * 4 * 160).toInt(), 255, 248, 225)
                 val l = r * 5f; c.drawLine(x - l, y, x + l, y, traco); c.drawLine(x, y - l, x, y + l, traco)
             }
         }
+
+        // CONSTELAÇÃO: de vez em quando 5 estrelas vizinhas se ligam com linhas finas e depois somem
+        if (t > proxCon) {
+            val a = rnd.nextInt(pts.size)
+            con = pts.indices.sortedBy { j -> val dx = (pts[j][0] - pts[a][0]) * w; val dy = (pts[j][1] - pts[a][1]) * h; dx * dx + dy * dy }.take(5).toIntArray()
+            conT = t; proxCon = t + 9f + rnd.nextFloat() * 6f
+        }
+        val uc = (t - conT) / 5f
+        if (uc in 0f..1f && con.size > 1) {
+            val al = kotlin.math.sin(Math.PI.toFloat() * uc)
+            traco.strokeWidth = d * 1.1f; traco.color = Color.argb((al * 120).toInt(), 200, 220, 255)
+            val n = kotlin.math.min(con.size - 1, (uc * 3f * (con.size - 1)).toInt() + 1)
+            for (q in 0 until n) { val A = pts[con[q]]; val B = pts[con[q + 1]]; c.drawLine(A[0] * w, A[1] * h, B[0] * w, B[1] * h, traco) }
+            for (q in con) { p.color = Color.argb((al * 255).toInt(), 230, 240, 255); c.drawCircle(pts[q][0] * w, pts[q][1] * h, 2.6f * d, p) }
+        }
+
         // poeirinha de luz subindo
         for (q in po) {
             q[1] -= q[3] * dt; if (q[1] < -0.05f) { q[1] = 1.05f; q[0] = rnd.nextFloat() }
@@ -2390,7 +2490,8 @@ class Estrelas(ctx: Context) : View(ctx) {
             p.color = Color.argb((a * 40).toInt(), 140, 190, 255); c.drawCircle(x, y, r * 3.2f, p)
             p.color = Color.argb((a * 200).toInt(), 225, 238, 255); c.drawCircle(x, y, r, p)
         }
-        // ESTRELA CADENTE: bem visível, rastro comprido, a cada 3 a 6 segundos (às vezes duas seguidas)
+
+        // ESTRELA CADENTE
         if (t > proxCad) { cadT = t; cadX = w * (0.35f + rnd.nextFloat() * 0.6f); cadY = h * (0.02f + rnd.nextFloat() * 0.25f); proxCad = t + if (rnd.nextFloat() < 0.25f) 1.6f else 3f + rnd.nextFloat() * 3f }
         val u = (t - cadT) / 1.5f
         if (u in 0f..1f) {
@@ -2401,8 +2502,8 @@ class Estrelas(ctx: Context) : View(ctx) {
             val tx = hx - dx * cauda; val ty = hy - dy * cauda
             traco.shader = android.graphics.LinearGradient(hx, hy, tx, ty, Color.argb((forca * 255).toInt(), 255, 252, 240), 0x00FFFFFF, android.graphics.Shader.TileMode.CLAMP)
             traco.color = Color.WHITE
-            traco.strokeWidth = d * 6f; traco.alpha = (forca * 60).toInt(); c.drawLine(hx, hy, tx, ty, traco)  // brilho largo
-            traco.strokeWidth = d * 2.6f; traco.alpha = 255; c.drawLine(hx, hy, tx, ty, traco)                   // traço
+            traco.strokeWidth = d * 6f; traco.alpha = (forca * 60).toInt(); c.drawLine(hx, hy, tx, ty, traco)
+            traco.strokeWidth = d * 2.6f; traco.alpha = 255; c.drawLine(hx, hy, tx, ty, traco)
             traco.shader = null
             p.color = Color.argb((forca * 90).toInt(), 190, 215, 255); c.drawCircle(hx, hy, d * 12f, p)
             p.color = Color.argb((forca * 255).toInt(), 255, 255, 255); c.drawCircle(hx, hy, d * 3f, p)
@@ -2410,3 +2511,88 @@ class Estrelas(ctx: Context) : View(ctx) {
         postInvalidateDelayed(40)
     }
 }
+
+/** Efeitos de datas e do tempo, nos dois modos: NEVE no Natal (20 a 26/dez), FOGOS no Ano Novo (31/dez e 1º/jan),
+ *  CORAÇÕES no Dia dos Namorados (12/jun) e CHUVA quando estiver chovendo em Pirapora. Parado quando não tem nada. */
+class Efeitos(ctx: Context) : View(ctx) {
+    var chovendo = false
+        set(v) { if (field != v) { field = v; invalidate() } }
+    private var forcado: String? = null
+    fun forcar(e: String) { forcado = if (e == "nada") "" else e; invalidate() }
+    private val rnd = java.util.Random()
+    private val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    private val linha = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { strokeCap = android.graphics.Paint.Cap.ROUND }
+    private val parts = Array(70) { floatArrayOf(rnd.nextFloat(), rnd.nextFloat(), rnd.nextFloat(), rnd.nextFloat()) }
+    private class Fogo(val x: Float, val y: Float, val cor: Int, val t0: Float)
+    private val fogos = ArrayList<Fogo>()
+    private var proxFogo = 0f
+    private val t0 = System.currentTimeMillis()
+    private var ultimo = t0
+    private val coracao = android.graphics.Path()
+
+    private fun modo(): String {
+        forcado?.let { return it }
+        val c = java.util.Calendar.getInstance(); val m = c.get(java.util.Calendar.MONTH) + 1; val dia = c.get(java.util.Calendar.DAY_OF_MONTH)
+        return when {
+            (m == 12 && dia == 31) || (m == 1 && dia == 1) -> "ano"
+            m == 12 && dia in 20..26 -> "natal"
+            m == 6 && dia == 12 -> "namorados"
+            chovendo -> "chuva"
+            else -> ""
+        }
+    }
+
+    override fun onDraw(c: android.graphics.Canvas) {
+        val modo = modo(); if (modo.isEmpty()) return
+        val w = width.toFloat(); val h = height.toFloat(); if (w <= 0f) return
+        val agora = System.currentTimeMillis(); val dt = ((agora - ultimo) / 1000f).coerceIn(0f, 0.1f); ultimo = agora
+        val t = (agora - t0) / 1000f; val d = resources.displayMetrics.density
+        when (modo) {
+            "chuva" -> { // gotinhas finas caindo inclinadas
+                linha.strokeWidth = d * 1.2f
+                for (q in parts) {
+                    q[1] += (0.9f + q[2] * 0.6f) * dt; q[0] -= 0.12f * dt
+                    if (q[1] > 1.05f) { q[1] = -0.05f; q[0] = rnd.nextFloat() * 1.1f }
+                    val x = q[0] * w; val y = q[1] * h; val l = (14f + q[3] * 14f) * d
+                    linha.color = Color.argb((50 + q[3] * 70).toInt(), 200, 220, 255)
+                    c.drawLine(x, y, x + l * 0.13f, y - l, linha)
+                }
+            }
+            "natal" -> { // neve caindo balançando
+                for (q in parts) {
+                    q[1] += (0.05f + q[2] * 0.07f) * dt
+                    if (q[1] > 1.03f) { q[1] = -0.03f; q[0] = rnd.nextFloat() }
+                    val x = (q[0] + 0.02f * kotlin.math.sin(t * 0.8f + q[3] * 6f)) * w; val y = q[1] * h
+                    p.color = Color.argb((140 + q[3] * 110).toInt(), 255, 255, 255); c.drawCircle(x, y, (1.5f + q[2] * 3f) * d, p)
+                }
+            }
+            "namorados" -> { // coraçõezinhos subindo
+                for (q in parts.take(28)) {
+                    q[1] -= (0.04f + q[2] * 0.05f) * dt
+                    if (q[1] < -0.05f) { q[1] = 1.05f; q[0] = rnd.nextFloat() }
+                    val x = (q[0] + 0.02f * kotlin.math.sin(t + q[3] * 6f)) * w; val y = q[1] * h; val s = (6f + q[2] * 10f) * d
+                    coracao.reset(); coracao.moveTo(x, y + s * 0.35f)
+                    coracao.cubicTo(x - s, y - s * 0.4f, x - s * 0.35f, y - s, x, y - s * 0.35f)
+                    coracao.cubicTo(x + s * 0.35f, y - s, x + s, y - s * 0.4f, x, y + s * 0.35f)
+                    p.color = Color.argb((120 + q[3] * 110).toInt(), 255, 70 + (q[3] * 60).toInt(), 120); c.drawPath(coracao, p)
+                }
+            }
+            "ano" -> { // fogos de artifício estourando
+                if (t > proxFogo) { fogos += Fogo(w * (0.15f + rnd.nextFloat() * 0.7f), h * (0.12f + rnd.nextFloat() * 0.35f), listOf(0xFFFFD24A, 0xFFFF5A7A, 0xFF5AD8FF, 0xFFB06CFF, 0xFF7CFF8A)[rnd.nextInt(5)].toInt(), t); proxFogo = t + 0.5f + rnd.nextFloat() * 1.1f }
+                val it = fogos.iterator()
+                while (it.hasNext()) {
+                    val f = it.next(); val u = (t - f.t0) / 1.6f
+                    if (u > 1f) { it.remove(); continue }
+                    val r = (1f - (1f - u) * (1f - u)) * 90f * d; val al = (1f - u)
+                    for (k in 0 until 24) {
+                        val ang = k / 24f * 6.2832f; val x = f.x + kotlin.math.cos(ang) * r; val y = f.y + kotlin.math.sin(ang) * r + u * u * 30f * d
+                        p.color = (f.cor and 0x00FFFFFF) or ((al * 255).toInt() shl 24); c.drawCircle(x, y, 2.4f * d, p)
+                    }
+                    p.color = (f.cor and 0x00FFFFFF) or (((1f - u) * 50).toInt() shl 24); c.drawCircle(f.x, f.y, r * 0.6f, p)
+                }
+            }
+        }
+        postInvalidateDelayed(40)
+    }
+}
+
