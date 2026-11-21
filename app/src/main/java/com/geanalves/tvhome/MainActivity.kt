@@ -783,15 +783,22 @@ class MainActivity : Activity() {
 
         // --- barra de apps
         // Faixa branca lisa de ponta a ponta, sem cantos, com uma linha fina em cima (barra 1)
+        // No modo escuro: ILHA DE VIDRO flutuante (arredondada, transparente, borda clara e reflexo em cima)
+        val ilha = Cores.escuro
         val dock = FrameLayout(this).apply {
-            background = android.graphics.drawable.LayerDrawable(
+            background = if (ilha) android.graphics.drawable.LayerDrawable(
+                arrayOf(
+                    GradientDrawable().apply { cornerRadius = dpf(30); setColor(0x29FFFFFF); setStroke(dp(1) + dp(1) / 2, 0x6BFFFFFF) },
+                    GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x2EFFFFFF, 0x00FFFFFF, 0x00FFFFFF)).apply { cornerRadius = dpf(30) },
+                ),
+            ) else android.graphics.drawable.LayerDrawable(
                 arrayOf(
                     android.graphics.drawable.ColorDrawable(Cores.sutil),
                     android.graphics.drawable.ColorDrawable(Cores.barra),
                 ),
             ).apply { setLayerInset(1, 0, dp(1), 0, 0) }
-            elevation = dpf(4)
-            setPadding(dp(48), dp(14), dp(48), dp(16))
+            elevation = if (ilha) 0f else dpf(4)
+            setPadding(if (ilha) dp(16) else dp(48), dp(12), if (ilha) dp(16) else dp(48), dp(12))
             clipChildren = false
             clipToPadding = false
         }
@@ -813,10 +820,15 @@ class MainActivity : Activity() {
         content.addView(
             dock,
             LinearLayout.LayoutParams(MATCH, WRAP).apply {
-                leftMargin = -dp(56)
-                rightMargin = -dp(56)
-                bottomMargin = -dp(26)
-                topMargin = dp(6)
+                if (ilha) {
+                    bottomMargin = -dp(8)
+                    topMargin = dp(10)
+                } else {
+                    leftMargin = -dp(56)
+                    rightMargin = -dp(56)
+                    bottomMargin = -dp(26)
+                    topMargin = dp(6)
+                }
             },
         )
 
@@ -1285,7 +1297,7 @@ class MainActivity : Activity() {
 
     private fun setBackdrop(b: Bitmap?) {
         // Fundo sempre branco e limpo: não mostra mais o filme atrás
-        if (!(FUNDO_COM_FILME || Cores.escuro) || b == null) {
+        if (!FUNDO_COM_FILME || b == null) {
             bgImage.animate().alpha(0f).setDuration(300).start()
             return
         }
