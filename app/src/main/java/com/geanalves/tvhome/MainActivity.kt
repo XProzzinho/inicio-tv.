@@ -251,6 +251,8 @@ class MainActivity : Activity() {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         goHome()
+        // atalho: abrir a janela do brilho direto (usado no teste e por outros apps)
+        if (intent?.getStringExtra("abrir") == "brilho") handler.postDelayed({ abrirBrilho() }, 400)
     }
 
     @Deprecated("Tela inicial não fecha com o botão Voltar")
