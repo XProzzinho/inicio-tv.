@@ -27,6 +27,9 @@ adb shell am start -n com.geanalves.tvhome/.MainActivity -e abrir brilho; sleep 
 tecla DPAD_DOWN; tecla DPAD_DOWN; tecla DPAD_DOWN; tecla DPAD_DOWN; foto 05d-brilho-60
 tecla DPAD_UP; tecla DPAD_UP; tecla DPAD_UP; tecla BACK
 tecla BACK
+# 3c) Tela de descanso (hora no centro)
+adb shell am start -n com.geanalves.tvhome/.MainActivity -e abrir descanso; sleep 20; foto 05e-descanso
+tecla BACK
 # 3) Volume (o número na tela)
 tecla VOLUME_UP; foto 06-volume
 # 4) Tela de todos os apps

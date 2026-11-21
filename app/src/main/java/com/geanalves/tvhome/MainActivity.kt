@@ -96,6 +96,7 @@ class MainActivity : Activity() {
     private lateinit var saverImg: ImageView
     private lateinit var saverClock: TextView
     private lateinit var saverTitle: TextView
+    private lateinit var saverInfo: TextView
     private var saverItems: List<Tmdb.Item> = emptyList()
     private var saverIndex = 0
     private val tabs = ArrayList<TextView>()
@@ -132,7 +133,7 @@ class MainActivity : Activity() {
             dateText.text = dateFmt.format(Date())
             mostrarLembretes()
             greeting.text = saudacao()
-            if (saver.visibility == View.VISIBLE) saverClock.text = clock.text
+            if (saver.visibility == View.VISIBLE) { saverClock.text = timeFmt.format(Date()); saverInfo.text = infoDescanso() }
             Weather.now { t -> mostrarClima(t ?: "") }
             handler.postDelayed(this, 10_000)
         }
@@ -253,6 +254,7 @@ class MainActivity : Activity() {
         goHome()
         // atalho: abrir a janela do brilho direto (usado no teste e por outros apps)
         if (intent?.getStringExtra("abrir") == "brilho") handler.postDelayed({ abrirBrilho() }, 400)
+        if (intent?.getStringExtra("abrir") == "descanso") handler.postDelayed({ showSaver() }, 400)
     }
 
     @Deprecated("Tela inicial não fecha com o botão Voltar")
@@ -1875,40 +1877,58 @@ class MainActivity : Activity() {
         }
         saverImg = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
         f.addView(saverImg, FrameLayout.LayoutParams(MATCH, MATCH))
+        // véu escuro por igual (a hora fica no meio da tela)
+        f.addView(View(this).apply { setBackgroundColor(0x66000000) }, FrameLayout.LayoutParams(MATCH, MATCH))
         f.addView(
             View(this).apply {
-                background = GradientDrawable(
-                    GradientDrawable.Orientation.TOP_BOTTOM,
-                    intArrayOf(0x00000000, 0x22000000, 0xCC000000.toInt()),
-                )
+                background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x00000000, 0x00000000, 0x99000000.toInt()))
             },
             FrameLayout.LayoutParams(MATCH, MATCH),
         )
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(56), 0, dp(56), dp(44))
+            gravity = Gravity.CENTER_HORIZONTAL
         }
+        // HORA GRANDE NO CENTRO, na fonte serifada de contraste (igual à da tela de bloqueio do celular)
         saverClock = TextView(this).apply {
-            textSize = 76f
+            textSize = 150f
             setTextColor(Color.WHITE)
-            typeface = Typeface.create("sans-serif-thin", Typeface.NORMAL)
+            typeface = try {
+                if (Build.VERSION.SDK_INT >= 26) Typeface.Builder(assets, "relogio.ttf").setFontVariationSettings("'wght' 700").build() ?: fonteRelogio() else fonteRelogio()
+            } catch (_: Throwable) { fonteRelogio() }
             includeFontPadding = false
+            gravity = Gravity.CENTER
+            fontFeatureSettings = "lnum, tnum"
+            setShadowLayer(dpf(18), 0f, dpf(4), 0x80000000.toInt())
         }
-        saverTitle = TextView(this).apply {
+        saverInfo = TextView(this).apply {
             textSize = 20f
-            setTextColor(0xCCFFFFFF.toInt())
-            setPadding(dp(4), dp(6), 0, 0)
+            letterSpacing = 0.12f
+            setTextColor(0xEEFFFFFF.toInt())
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, 0)
+            setShadowLayer(dpf(10), 0f, dpf(2), 0x80000000.toInt())
         }
         col.addView(saverClock)
-        col.addView(saverTitle)
-        f.addView(col, FrameLayout.LayoutParams(MATCH, WRAP, Gravity.BOTTOM))
+        col.addView(saverInfo)
+        f.addView(col, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+        // nome do filme lá embaixo, no meio
+        saverTitle = TextView(this).apply {
+            textSize = 17f
+            setTextColor(0xB3FFFFFF.toInt())
+            gravity = Gravity.CENTER
+            setShadowLayer(dpf(8), 0f, dpf(2), 0x80000000.toInt())
+        }
+        f.addView(saverTitle, FrameLayout.LayoutParams(MATCH, WRAP, Gravity.BOTTOM).apply { bottomMargin = dp(30) })
         return f
     }
 
     private fun showSaver() {
         if (saver.visibility == View.VISIBLE) return
         saverClock.text = timeFmt.format(Date())
-        saverTitle.text = weatherText.text
+        saverInfo.text = infoDescanso()
+        saverTitle.text = ""
         saver.alpha = 0f
         saver.visibility = View.VISIBLE
         saver.animate().alpha(1f).setDuration(600).start()
@@ -1921,8 +1941,16 @@ class MainActivity : Activity() {
         }
     }
 
+    /** "SÁBADO · 21 DE NOVEMBRO · 29°" */
+    private fun infoDescanso(): String {
+        val dia = SimpleDateFormat("EEEE · d 'DE' MMMM", Locale("pt", "BR")).format(Date())
+        val temp = weatherText.text?.toString()?.substringBefore(" · ")?.trim().orEmpty()
+        return (if (temp.contains("°")) "$dia · $temp" else dia).uppercase(Locale("pt", "BR"))
+    }
+
     private fun nextSaverImage() {
         saverClock.text = timeFmt.format(Date())
+        saverInfo.text = infoDescanso()
         if (saverItems.isEmpty()) return
         val item = saverItems[saverIndex % saverItems.size]
         saverIndex++
