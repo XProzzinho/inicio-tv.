@@ -37,7 +37,6 @@ object Weather {
                 }
                 val cur = json.getJSONObject("current")
                 val temp = cur.getDouble("temperature_2m").roundToInt()
-                Cena.codigo = cur.optInt("weather_code", -1)
                 "$temp° · ${describe(cur.optInt("weather_code", -1))} · $CITY"
             } catch (_: Throwable) {
                 null
