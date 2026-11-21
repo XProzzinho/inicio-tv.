@@ -32,14 +32,18 @@ adb shell am start -n com.geanalves.tvhome/.MainActivity -e abrir descanso; slee
 tecla BACK
 # 3c2) Modo claro com o céu animado e a ilha de vidro
 adb shell am start -n com.geanalves.tvhome/.MainActivity; sleep 6; for i in 1 2 3; do foto 05e2-claro-$i; sleep 1; done
+for c in sol chuva noite; do adb shell am start -n com.geanalves.tvhome/.MainActivity -e cena $c; sleep 4; foto 05e3-claro-$c; done
 # 3d) Modo escuro (céu azul com estrelas)
 adb shell am start -n com.geanalves.tvhome/.MainActivity -e abrir modo; sleep 4; for i in 1 2 3 4 5 6 7 8 9 10 11 12; do foto 05f-escuro-$i; sleep 0.4; done
 tecla DPAD_DOWN; sleep 2; foto 05g-escuro-foco
 adb shell am start -n com.geanalves.tvhome/.MainActivity -e efeito natal; sleep 3; foto 05h-natal
-adb shell am start -n com.geanalves.tvhome/.MainActivity -e efeito ano; sleep 3; foto 05i-ano
-adb shell am start -n com.geanalves.tvhome/.MainActivity -e efeito namorados; sleep 3; foto 05j-namorados
-adb shell am start -n com.geanalves.tvhome/.MainActivity -e efeito chuva; sleep 3; foto 05k-chuva
 adb shell am start -n com.geanalves.tvhome/.MainActivity -e efeito nada; sleep 2
+# 3e) Papel de parede do TEMPO (tela inicial escura)
+for c in sol parcial nublado garoa chuva tempestade neblina amanhecer tarde noite noitenuvem noitechuva; do adb shell am start -n com.geanalves.tvhome/.MainActivity -e cena $c; sleep 4; foto 05l-tempo-$c; done
+adb shell am start -n com.geanalves.tvhome/.MainActivity -e cena tempestade; sleep 1; for i in 1 2 3 4 5 6 7 8; do foto 05m-raio-$i; sleep 0.5; done
+# 3f) Tela de descanso com o TEMPO
+for c in sol chuva tempestade noite tarde neblina; do adb shell am start -n com.geanalves.tvhome/.MainActivity -e cena $c -e abrir descanso; sleep 6; foto 05n-descanso-$c; tecla BACK; sleep 1; done
+adb shell am start -n com.geanalves.tvhome/.MainActivity -e cena real; sleep 2
 adb shell am start -n com.geanalves.tvhome/.MainActivity -e abrir modo; sleep 8
 # 3) Volume (o número na tela)
 tecla VOLUME_UP; foto 06-volume

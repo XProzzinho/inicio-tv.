@@ -269,6 +269,16 @@ class MainActivity : Activity() {
         super.onNewIntent(intent)
         goHome()
         // atalho: abrir a janela do brilho direto (usado no teste e por outros apps)
+        intent?.getStringExtra("cena")?.let { e ->
+            // teste: força o tempo e a hora do papel de parede
+            val (cod, hr) = when (e) {
+                "sol" -> 0 to 11; "parcial" -> 2 to 14; "nublado" -> 3 to 10; "neblina" -> 45 to 7
+                "garoa" -> 53 to 15; "chuva" -> 63 to 13; "tempestade" -> 95 to 16; "noitechuva" -> 63 to 22
+                "noite" -> 0 to 22; "noitenuvem" -> 2 to 23; "amanhecer" -> 0 to 6; "tarde" -> 0 to 18
+                else -> null to null
+            }
+            Cena.forcaCodigo = cod; Cena.forcaHora = hr
+        }
         if (intent?.getStringExtra("abrir") == "brilho") handler.postDelayed({ abrirBrilho() }, 400)
         if (intent?.getStringExtra("abrir") == "descanso") handler.postDelayed({ showSaver() }, 400)
         if (intent?.getStringExtra("abrir") == "modo") handler.postDelayed({ trocarModo() }, 400)
@@ -492,7 +502,7 @@ class MainActivity : Activity() {
     /** Texto do clima com o ícone do tempo na frente. */
     private fun mostrarClima(t: String) {
         weatherText.text = t
-        if (::efeitos.isInitialized) efeitos.chovendo = Regex("chuva|garoa|trovoada|tempestade", RegexOption.IGNORE_CASE).containsMatchIn(t)
+        if (saver.visibility == View.VISIBLE && !DESCANSO_COM_FILME) saverTitle.text = Cena.descricao()
         val low = t.lowercase()
         val res = when {
             "trovoada" in low -> R.drawable.tempo_trovoada
@@ -563,7 +573,8 @@ class MainActivity : Activity() {
             FrameLayout.LayoutParams(MATCH, MATCH),
         )
         // modo escuro: céu azul-noite com estrelinhas piscando e brilhos suaves
-        root.addView(Estrelas(this, claro = !Cores.escuro), FrameLayout.LayoutParams(MATCH, MATCH))
+        // papel de parede do TEMPO de verdade: sol, nuvens, chuva, raios, neblina, noite estrelada, lua cheia...
+        root.addView(Cena(this, claro = !Cores.escuro), FrameLayout.LayoutParams(MATCH, MATCH))
         // datas especiais (Natal, Ano Novo, Namorados) e chuva de verdade em Pirapora
         efeitos = Efeitos(this)
         root.addView(efeitos, FrameLayout.LayoutParams(MATCH, MATCH))
@@ -1962,9 +1973,10 @@ class MainActivity : Activity() {
         saverImg = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
         f.addView(saverImg, FrameLayout.LayoutParams(MATCH, MATCH))
         // véu escuro por igual (a hora fica no meio da tela)
-        f.addView(View(this).apply { setBackgroundColor(0x66000000) }, FrameLayout.LayoutParams(MATCH, MATCH))
+        if (DESCANSO_COM_FILME) f.addView(View(this).apply { setBackgroundColor(0x66000000) }, FrameLayout.LayoutParams(MATCH, MATCH))
         // céu animado também no descanso: estrelas, constelações, poeirinha e estrela cadente (sem lua e aurora)
-        f.addView(Estrelas(this, claro = false, descanso = true), FrameLayout.LayoutParams(MATCH, MATCH))
+        // tela de descanso = o céu do tempo de agora em Pirapora
+        f.addView(Cena(this, descanso = true), FrameLayout.LayoutParams(MATCH, MATCH))
         f.addView(
             View(this).apply {
                 background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0x00000000, 0x00000000, 0x99000000.toInt()))
@@ -2023,12 +2035,12 @@ class MainActivity : Activity() {
         if (saver.visibility == View.VISIBLE) return
         saverClock.text = timeFmt.format(Date())
         saverInfo.text = infoDescanso()
-        saverTitle.text = ""
+        saverTitle.text = if (DESCANSO_COM_FILME) "" else Cena.descricao()
         previsaoDescanso()
         saver.alpha = 0f
         saver.visibility = View.VISIBLE
         saver.animate().alpha(1f).setDuration(600).start()
-        if (Tmdb.enabled) {
+        if (Tmdb.enabled && DESCANSO_COM_FILME) {
             Tmdb.list(0, infantil = prefs.crianca(prefs.perfil)) { items ->
                 saverItems = items
                 handler.removeCallbacks(saverNext)
@@ -2387,6 +2399,8 @@ class MainActivity : Activity() {
         private const val MAX_VOLTAS = 5
         /** Mude para true para o fundo pegar as cores do filme selecionado */
         private const val FUNDO_COM_FILME = false
+        /** false = tela de descanso mostra o céu do tempo (não o filme). */
+        private const val DESCANSO_COM_FILME = false
         /** Os 15 avatares desenhados: 0-4 feminino, 5-9 masculino, 10-14 infantil */
         private val AVATARES = intArrayOf(
             R.drawable.avatar_00, R.drawable.avatar_01, R.drawable.avatar_02, R.drawable.avatar_03, R.drawable.avatar_04,
