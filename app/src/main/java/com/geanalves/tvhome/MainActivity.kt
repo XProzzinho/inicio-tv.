@@ -2445,7 +2445,7 @@ class Estrelas(ctx: Context) : View(ctx) {
         run {
             val r = 18f * d; val lx = w * 0.60f; val ly = h * 0.255f; val f = faseLua()
             if (f > 0.03f && f < 0.97f) {
-                p.color = 0x22FFF2CC; c.drawCircle(lx, ly, r * 2.4f, p); p.color = 0x14FFF2CC; c.drawCircle(lx, ly, r * 3.6f, p)
+                p.color = 0x16FFF2CC; c.drawCircle(lx, ly, r * 1.8f, p); p.color = 0x0AFFF2CC; c.drawCircle(lx, ly, r * 2.6f, p)
                 val camada = c.saveLayer(lx - r * 2, ly - r * 2, lx + r * 2, ly + r * 2, null)
                 p.color = 0xFFFFF4D6.toInt(); c.drawCircle(lx, ly, r, p)
                 val k = f * 2f // 0..2
