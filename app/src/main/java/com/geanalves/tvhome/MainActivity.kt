@@ -21,6 +21,7 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -343,6 +344,7 @@ class MainActivity : Activity() {
         if (!isFireTv()) blocos += bloco(R.drawable.ic_input, "Entradas") { openInputs() }
         blocos += bloco(R.drawable.ic_wifi, "Wi-Fi") { openWifi() }
         blocos += bloco(if (Cores.escuro) R.drawable.ic_claro else R.drawable.ic_lua, if (Cores.escuro) "Modo claro" else "Modo escuro") { trocarModo() }
+        blocos += bloco(R.drawable.ic_brilho, "Brilho ${Brilho.atual(this)}%") { abrirBrilho() }
         blocos += bloco(R.drawable.ic_menu, "Configurações") { open(Intent(Settings.ACTION_SETTINGS)) }
         blocos.chunked(2).forEachIndexed { r, par ->
             val linha = LinearLayout(this).apply {
@@ -361,6 +363,54 @@ class MainActivity : Activity() {
         }
         d.show()
         blocos.first().requestFocus()
+    }
+
+    /** Janela do brilho: − e + (de 10 em 10), o número grande no meio. Setas ◀ ▶ do controle também mudam. */
+    private fun abrirBrilho() {
+        val (d, box) = whiteDialog()
+        box.addView(dialogTitle("Brilho"))
+        val num = TextView(this).apply {
+            textSize = 64f
+            setTextColor(PRETO)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            gravity = Gravity.CENTER
+            fontFeatureSettings = "tnum"
+        }
+        val aviso = TextView(this).apply {
+            textSize = 14f
+            setTextColor(Cores.cinza)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(4), 0, dp(14))
+        }
+        fun mostra(n: Int) { num.text = "$n%"; aviso.text = if (n <= 20) "bom pra dormir" else if (n >= 100) "brilho normal" else "" }
+        fun muda(passo: Int?, fixo: Int? = null) {
+            val alvo = fixo ?: (Brilho.atual(this) + (passo ?: 0))
+            if (alvo < 100 && Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(this)) {
+                aviso.text = "Libere \"Sobrepor a outros apps\" pro Início TV"
+                try { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:$packageName"))) } catch (_: Throwable) {}
+                return
+            }
+            mostra(Brilho.aplicar(this, alvo))
+        }
+        mostra(Brilho.atual(this))
+        box.addView(num, LinearLayout.LayoutParams(WRAP, WRAP).apply { topMargin = dp(6) })
+        box.addView(aviso, LinearLayout.LayoutParams(WRAP, WRAP))
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        val menos = pill("−  Abaixar") { muda(-10) }
+        val mais = pill("＋  Aumentar") { muda(10) }
+        val normal = pill("100%") { muda(null, 100) }
+        listOf(menos, mais, normal).forEachIndexed { i, v -> row.addView(v, LinearLayout.LayoutParams(WRAP, WRAP).apply { if (i > 0) leftMargin = dp(12) }) }
+        box.addView(row)
+        d.setOnKeyListener { _, code, ev ->
+            if (ev.action != android.view.KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            when (code) {
+                android.view.KeyEvent.KEYCODE_DPAD_UP -> { muda(10); true }
+                android.view.KeyEvent.KEYCODE_DPAD_DOWN -> { muda(-10); true }
+                else -> false
+            }
+        }
+        d.show()
+        mais.requestFocus()
     }
 
     private fun trocarModo() {
