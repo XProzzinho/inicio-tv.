@@ -40,6 +40,9 @@ adb shell am start -n com.geanalves.tvhome/.MainActivity -e efeito ano; sleep 3;
 adb shell am start -n com.geanalves.tvhome/.MainActivity -e efeito namorados; sleep 3; foto 05j-namorados
 adb shell am start -n com.geanalves.tvhome/.MainActivity -e efeito chuva; sleep 3; foto 05k-chuva
 adb shell am start -n com.geanalves.tvhome/.MainActivity -e efeito nada; sleep 2
+# 3e) Céu de verdade do modo escuro (lua, nuvens, chuva)
+for c in estrelado nuvens chuva tempestade crescente nascendo fina; do adb shell am start -n com.geanalves.tvhome/.MainActivity -e ceu $c; sleep 4; foto 05l-ceu-$c; done
+adb shell am start -n com.geanalves.tvhome/.MainActivity -e ceu real; sleep 3; foto 05l-ceu-real
 adb shell am start -n com.geanalves.tvhome/.MainActivity -e abrir modo; sleep 8
 # 3) Volume (o número na tela)
 tecla VOLUME_UP; foto 06-volume

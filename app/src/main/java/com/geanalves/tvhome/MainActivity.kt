@@ -269,6 +269,15 @@ class MainActivity : Activity() {
         super.onNewIntent(intent)
         goHome()
         // atalho: abrir a janela do brilho direto (usado no teste e por outros apps)
+        intent?.getStringExtra("ceu")?.let { e ->
+            // teste: força o céu do modo escuro (clima, fase e altura da lua)
+            val v: Triple<Int?, Float?, Float?> = when (e) {
+                "estrelado" -> Triple(0, 0.75f, 72f); "nuvens" -> Triple(2, 0.5f, 45f); "chuva" -> Triple(61, 0.5f, 14f)
+                "tempestade" -> Triple(95, 0.5f, 40f); "crescente" -> Triple(0, 0.22f, 6f); "nascendo" -> Triple(1, 0.5f, 1f)
+                "fina" -> Triple(0, 0.1f, 50f); else -> Triple(null, null, null)
+            }
+            CeuLua.forcaCodigo = v.first; CeuLua.forcaFase = v.second; CeuLua.forcaAlt = v.third
+        }
         if (intent?.getStringExtra("abrir") == "brilho") handler.postDelayed({ abrirBrilho() }, 400)
         if (intent?.getStringExtra("abrir") == "descanso") handler.postDelayed({ showSaver() }, 400)
         if (intent?.getStringExtra("abrir") == "modo") handler.postDelayed({ trocarModo() }, 400)
@@ -492,7 +501,7 @@ class MainActivity : Activity() {
     /** Texto do clima com o ícone do tempo na frente. */
     private fun mostrarClima(t: String) {
         weatherText.text = t
-        if (::efeitos.isInitialized) efeitos.chovendo = Regex("chuva|garoa|trovoada|tempestade", RegexOption.IGNORE_CASE).containsMatchIn(t)
+        if (::efeitos.isInitialized) efeitos.chovendo = !Cores.escuro && Regex("chuva|garoa|trovoada|tempestade", RegexOption.IGNORE_CASE).containsMatchIn(t)
         val low = t.lowercase()
         val res = when {
             "trovoada" in low -> R.drawable.tempo_trovoada
@@ -563,7 +572,8 @@ class MainActivity : Activity() {
             FrameLayout.LayoutParams(MATCH, MATCH),
         )
         // modo escuro: céu azul-noite com estrelinhas piscando e brilhos suaves
-        root.addView(Estrelas(this, claro = !Cores.escuro), FrameLayout.LayoutParams(MATCH, MATCH))
+        // modo escuro: céu de verdade (lua na fase e altura reais, nuvens, chuva); modo claro: estrelinhas claras
+        root.addView(if (Cores.escuro) CeuLua(this) else Estrelas(this, claro = true), FrameLayout.LayoutParams(MATCH, MATCH))
         // datas especiais (Natal, Ano Novo, Namorados) e chuva de verdade em Pirapora
         efeitos = Efeitos(this)
         root.addView(efeitos, FrameLayout.LayoutParams(MATCH, MATCH))
