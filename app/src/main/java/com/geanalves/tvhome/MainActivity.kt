@@ -269,6 +269,12 @@ class MainActivity : Activity() {
         super.onNewIntent(intent)
         goHome()
         // atalho: abrir a janela do brilho direto (usado no teste e por outros apps)
+        if (intent?.getStringExtra("teste") == "favs7") {
+            // teste: enche a barra com 7 apps pra ver se cabem no vidro
+            val apps = AppRepo.load(this).filter { it.pkg != packageName }
+            prefs.favs = (apps.map { it.pkg }.take(7))
+            buildDock()
+        }
         intent?.getStringExtra("ceu")?.let { e ->
             // teste: força o céu do modo escuro (clima, fase e altura da lua)
             val v: Triple<Int?, Float?, Float?> = when (e) {
@@ -1366,8 +1372,9 @@ class MainActivity : Activity() {
     /** Tamanho dos blocos do dock: 7 apps + "Todos" cabem sem rolar. */
     private fun dockSize(): Pair<Int, Int> {
         val gap = dp(DOCK_GAP)
-        val avail = resources.displayMetrics.widthPixels - dp(96) - dp(16)
-        val w = ((avail - gap * DOCK_APPS) / (DOCK_APPS + 9f / 16f)).toInt()
+        // largura de dentro da ilha de vidro: tela − margens da tela (56+56) − bordas da ilha (16+16) − folga da fileira (8+8) − sobra
+        val avail = resources.displayMetrics.widthPixels - dp(112) - dp(32) - dp(16) - dp(12)
+        val w = ((avail - gap * DOCK_APPS) / (DOCK_APPS + TODOS_ESCALA * 9f / 16f)).toInt()
         val h = w * 9 / 16
         return w to h
     }
@@ -1470,7 +1477,7 @@ class MainActivity : Activity() {
         col.addView(
             TextView(this).apply {
                 text = "Todos"
-                textSize = 10f
+                textSize = 9f
                 setTextColor(INK)
                 gravity = Gravity.CENTER
                 setPadding(0, dp(4), 0, 0)
@@ -1478,7 +1485,8 @@ class MainActivity : Activity() {
         )
         card.addView(col, FrameLayout.LayoutParams(MATCH, MATCH))
         styleDockFocus(card)
-        val h = dockSize().second
+        // "Todos" menorzinho, pra caber 7 apps dentro do vidro
+        val h = (dockSize().second * TODOS_ESCALA).toInt()
         card.layoutParams = LinearLayout.LayoutParams(h, h)
         return card
     }
@@ -2405,6 +2413,7 @@ class MainActivity : Activity() {
         )
         private const val DOCK_APPS = 7
         private const val DOCK_GAP = 16
+        private const val TODOS_ESCALA = 0.72f
         /** Tempo parado até o descanso de tela (3 minutos) */
         private const val IDLE_MS = 3 * 60_000L
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
