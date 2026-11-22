@@ -507,7 +507,7 @@ class MainActivity : Activity() {
     /** Texto do clima com o ícone do tempo na frente. */
     private fun mostrarClima(t: String) {
         weatherText.text = t
-        if (::efeitos.isInitialized) efeitos.chovendo = !Cores.escuro && Regex("chuva|garoa|trovoada|tempestade", RegexOption.IGNORE_CASE).containsMatchIn(t)
+        if (::efeitos.isInitialized) efeitos.chovendo = !(Cores.escuro && CEU_DE_VERDADE) && Regex("chuva|garoa|trovoada|tempestade", RegexOption.IGNORE_CASE).containsMatchIn(t)
         val low = t.lowercase()
         val res = when {
             "trovoada" in low -> R.drawable.tempo_trovoada
@@ -579,7 +579,7 @@ class MainActivity : Activity() {
         )
         // modo escuro: céu azul-noite com estrelinhas piscando e brilhos suaves
         // modo escuro: céu de verdade (lua na fase e altura reais, nuvens, chuva); modo claro: estrelinhas claras
-        root.addView(if (Cores.escuro) CeuLua(this) else Estrelas(this, claro = true), FrameLayout.LayoutParams(MATCH, MATCH))
+        root.addView(if (Cores.escuro && CEU_DE_VERDADE) CeuLua(this) else Estrelas(this, claro = !Cores.escuro), FrameLayout.LayoutParams(MATCH, MATCH))
         // datas especiais (Natal, Ano Novo, Namorados) e chuva de verdade em Pirapora
         efeitos = Efeitos(this)
         root.addView(efeitos, FrameLayout.LayoutParams(MATCH, MATCH))
@@ -2414,6 +2414,8 @@ class MainActivity : Activity() {
         private const val DOCK_APPS = 7
         private const val DOCK_GAP = 16
         private const val TODOS_ESCALA = 0.72f
+        /** false = modo escuro com o céu antigo (estrelas, constelações, lua, aurora); true = céu do tempo com a lua de verdade. */
+        private const val CEU_DE_VERDADE = false
         /** Tempo parado até o descanso de tela (3 minutos) */
         private const val IDLE_MS = 3 * 60_000L
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
