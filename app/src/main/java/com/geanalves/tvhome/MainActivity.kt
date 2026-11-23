@@ -1972,7 +1972,9 @@ class MainActivity : Activity() {
 
     private fun buildSaver(): FrameLayout {
         val f = FrameLayout(this).apply {
-            setBackgroundColor(Color.BLACK)
+            // céu azul-noite (sem filme atrás)
+            if (DESCANSO_COM_FILME) setBackgroundColor(Color.BLACK)
+            else background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, intArrayOf(0xFF1B2A45.toInt(), 0xFF0E1830.toInt(), 0xFF060A14.toInt()))
             visibility = View.GONE
             isClickable = true
             setOnClickListener { hideSaver() }
@@ -1980,7 +1982,7 @@ class MainActivity : Activity() {
         saverImg = ImageView(this).apply { scaleType = ImageView.ScaleType.CENTER_CROP }
         f.addView(saverImg, FrameLayout.LayoutParams(MATCH, MATCH))
         // véu escuro por igual (a hora fica no meio da tela)
-        f.addView(View(this).apply { setBackgroundColor(0x66000000) }, FrameLayout.LayoutParams(MATCH, MATCH))
+        if (DESCANSO_COM_FILME) f.addView(View(this).apply { setBackgroundColor(0x66000000) }, FrameLayout.LayoutParams(MATCH, MATCH))
         // céu animado também no descanso: estrelas, constelações, poeirinha e estrela cadente (sem lua e aurora)
         f.addView(Estrelas(this, claro = false, descanso = true), FrameLayout.LayoutParams(MATCH, MATCH))
         f.addView(
@@ -2046,7 +2048,9 @@ class MainActivity : Activity() {
         saver.alpha = 0f
         saver.visibility = View.VISIBLE
         saver.animate().alpha(1f).setDuration(600).start()
-        if (Tmdb.enabled) {
+        // sem cartaz de filme atrás: só o céu, a hora, a data e a previsão (o relógio continua atualizando)
+        if (!DESCANSO_COM_FILME) { saverItems = emptyList(); handler.removeCallbacks(saverNext); handler.post(saverNext) }
+        else if (Tmdb.enabled) {
             Tmdb.list(0, infantil = prefs.crianca(prefs.perfil)) { items ->
                 saverItems = items
                 handler.removeCallbacks(saverNext)
@@ -2416,6 +2420,8 @@ class MainActivity : Activity() {
         private const val TODOS_ESCALA = 0.72f
         /** false = modo escuro com o céu antigo (estrelas, constelações, lua, aurora); true = céu do tempo com a lua de verdade. */
         private const val CEU_DE_VERDADE = false
+        /** false = tela de descanso sem o cartaz do filme atrás (só o céu azul-noite com estrelas). */
+        private const val DESCANSO_COM_FILME = false
         /** Tempo parado até o descanso de tela (3 minutos) */
         private const val IDLE_MS = 3 * 60_000L
         private const val MATCH = ViewGroup.LayoutParams.MATCH_PARENT
@@ -2474,7 +2480,7 @@ class Estrelas(ctx: Context, private val claro: Boolean = false, private val des
         // ECONOMIA AUTOMÁTICA: se a TV estiver lenta (menos de ~14 quadros/s), desenha menos coisa
         media = media * 0.95f + dt * 0.05f
         if (!leve && media > 0.07f) leve = true else if (leve && media < 0.045f) leve = false
-        if (!descanso) fundo?.let { dst.set(0, 0, width, height); c.drawBitmap(it, null, dst, null) }
+        fundo?.let { dst.set(0, 0, width, height); c.drawBitmap(it, null, dst, null) }
         val d = resources.displayMetrics.density
         val t = (agora - t0) / 1000f
 
